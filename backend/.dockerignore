@@ -1,0 +1,33 @@
+__pycache__
+*.py[cod]
+*$py.class
+*.egg
+*.egg-info
+dist
+build
+
+# Environment secrets — must never be in image
+.env
+.env.*
+
+# Dev tooling
+venv/
+.venv/
+*.pyc
+*.pyo
+
+# Tests / local config
+tests/
+.coverage
+.pytest_cache/
+
+# Logs
+*.log
+
+# Docker
+Dockerfile*
+docker-compose*
+
+# Git
+.git
+.gitignore
