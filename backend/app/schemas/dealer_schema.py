@@ -1,4 +1,4 @@
-from pydantic import BaseModel, constr
+from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 from datetime import datetime
 
@@ -16,11 +16,11 @@ class BeneficiaryResponse(BaseModel):
 
 class LinkMobileRequest(BaseModel):
     ration_card: str
-    mobile: constr(pattern=r"^\d{10}$")
+    mobile: str = Field(pattern=r"^\d{10}$")
 
 class SetPinRequest(BaseModel):
     ration_card: str
-    pin: constr(pattern=r"^\d{4}$")
+    pin: str = Field(pattern=r"^\d{4}$")
 
 class MessageResponse(BaseModel):
     message: str
