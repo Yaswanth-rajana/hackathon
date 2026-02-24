@@ -2,12 +2,14 @@ import datetime
 import time
 import threading
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.services.blockchain.block import Block
 from app.services.blockchain.mining import proof_of_work
-from app.services.blockchain.storage import save_chain_to_file, load_chain_from_file
-from app.services.blockchain.validation import is_chain_valid
+from app.services.blockchain.validation import is_chain_valid_stateless
+from app.models.blockchain_ledger import BlockchainLedger
 
 logger = logging.getLogger(__name__)
 
@@ -16,117 +18,148 @@ class Blockchain:
         self.pending_transactions: List[Dict[str, Any]] = []
         self.difficulty: int = 2
         self.lock = threading.RLock()
+
+    def ensure_genesis_exists(self, db: Session) -> None:
+        """Ensures index 0 exists in the database ledger."""
+        genesis = db.query(BlockchainLedger).filter(BlockchainLedger.block_index == 0).first()
+        if not genesis:
+            logger.info("Initializing Genesis Block in SQL Ledger...")
+            block = Block(
+                index=0,
+                timestamp="2026-01-01T00:00:00+00:00",
+                transactions=[{
+                    "type": "GENESIS",
+                    "message": "RationShield Blockchain Started",
+                    "version": "1.0",
+                    "network": "private-permissioned"
+                }],
+                previous_hash="0",
+                nonce=0,
+                mining_time=0.0
+            )
+            block.hash = block.calculate_hash()
+            
+            db_block = BlockchainLedger(
+                block_index=block.index,
+                block_hash=block.hash,
+                previous_hash=block.previous_hash,
+                transaction_id=None,
+                payload_hash=block.payload_hash,
+                timestamp=block.timestamp,
+                nonce=block.nonce,
+                validator=block.validator,
+                network=block.network,
+                mining_time=block.mining_time,
+                is_valid=True
+            )
+            db.add(db_block)
+            db.commit()
+
+    def get_latest_block(self, db: Session) -> Optional[Block]:
+        """Fetches the highest index block from DB."""
+        db_block = db.query(BlockchainLedger).order_by(BlockchainLedger.block_index.desc()).first()
+        if not db_block:
+            return None
         
-        loaded_chain = load_chain_from_file()
-        if loaded_chain:
-            self.chain = loaded_chain
-        else:
-            self.chain = []
-            self.create_genesis_block()
-
-    def create_genesis_block(self) -> None:
-        block = Block(
-            index=0,
-            timestamp="2026-01-01T00:00:00+00:00",
-            transactions=[{
-                "type": "GENESIS",
-                "message": "RationShield Blockchain Started",
-                "version": "1.0",
-                "network": "private-permissioned"
-            }],
-            previous_hash="0",
-            nonce=0,
-            mining_time=0.0
+        return Block(
+            index=db_block.block_index,
+            timestamp=db_block.timestamp,
+            transactions=[], # In-memory block doesn't need TXs for linkage checks
+            previous_hash=db_block.previous_hash,
+            hash=db_block.block_hash,
+            payload_hash=db_block.payload_hash,
+            nonce=db_block.nonce,
+            validator=db_block.validator,
+            network=db_block.network,
+            mining_time=db_block.mining_time
         )
-        # Deterministic genesis hash calculation based on hardcoded constants
-        block.hash = block.calculate_hash()
-        self.chain.append(block)
-        save_chain_to_file(self.chain)
-
-    def get_chain_fingerprint(self) -> dict:
-        import hashlib
-        all_hashes = "".join([b.hash for b in self.chain])
-        chain_hash = hashlib.sha256(all_hashes.encode()).hexdigest()
-        return {
-            "latest_block": self.get_latest_block().index,
-            "chain_hash": chain_hash
-        }
 
     def add_transaction(self, transaction: Dict[str, Any]) -> None:
         with self.lock:
             self.pending_transactions.append(transaction)
 
-    def mine_pending_transactions(self, simulate: bool = False) -> Block:
+    def mine_pending_transactions(self, db: Session, simulate: bool = False) -> Block:
         with self.lock:
             if not self.pending_transactions:
                 raise ValueError("No pending transactions to mine")
 
-            last_block = self.get_latest_block()
+            # FETCH SOURCE OF TRUTH FROM DB
+            last_block_db = self.get_latest_block(db)
+            if not last_block_db:
+                # If no blocks, we must ensure genesis exists first
+                self.ensure_genesis_exists(db)
+                last_block_db = self.get_latest_block(db)
+
+            new_index = last_block_db.index + 1
+            previous_hash = last_block_db.hash
             
-            # Copy pending to avoid mutating shared state during simulation/mining
             pending_copy = self.pending_transactions.copy()
-            new_index = len(self.chain)
 
         new_block = Block(
             index=new_index,
             timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             transactions=pending_copy,
-            previous_hash=last_block.hash
+            previous_hash=previous_hash
         )
 
         start_time = time.time()
-        # Run proof of work
         proof_of_work(new_block, self.difficulty)
-        mining_time = time.time() - start_time
-        new_block.mining_time = round(mining_time, 4)
+        new_block.mining_time = round(time.time() - start_time, 4)
         
-        # Step 3 Multi-Node Signature Injection using canonical header bounds
         from app.services.blockchain.crypto import sign_block_header
-        
         header_dict = new_block.get_header_dict()
-        sig_node_1 = sign_block_header(header_dict, "NODE_1")
-        sig_node_2 = sign_block_header(header_dict, "NODE_2")
-        
-        new_block.validator_signatures = [sig_node_1, sig_node_2]
+        new_block.validator_signatures = [
+            sign_block_header(header_dict, "NODE_1"),
+            sign_block_header(header_dict, "NODE_2")
+        ]
         
         if simulate:
-            logger.info("Blockchain simulation called. Returning block without committing.")
             return new_block
             
-        # Append and clean up natively
-        self.commit_block(new_block)
+        self.commit_block(db, new_block)
         return new_block
         
-    def commit_block(self, block: Block) -> None:
-        """Phase 2 Commit: finalize execution and disk persistence."""
+    def commit_block(self, db: Session, block: Block) -> None:
+        """Phase 2 Commit: finalize execution into the SQL Ledger."""
         with self.lock:
-            # Re-verify index to prevent race conditions during concurrent mining
-            if block.index != len(self.chain):
-                raise ValueError("Block index mismatch, chain was modified during mining")
-            self.chain.append(block)
-            self.pending_transactions = []
-        
-        # Disk write outside of lock
-        save_chain_to_file(self.chain)
-        
-        fingerprint = self.get_chain_fingerprint()["chain_hash"]
-        signers = [sig.get("signed_by") for sig in getattr(block, "validator_signatures", [])]
-        logger.info(f"[BLOCK_COMMIT] index={block.index} signers={signers} fingerprint={fingerprint[:10]}")
-        
+            # Final integrity check before insertion
+            last_block = self.get_latest_block(db)
+            expected_index = (last_block.index + 1) if last_block else 0
+            
+            if block.index != expected_index:
+                raise ValueError(f"Sequential Integrity Violation: Block {block.index} attempted, but DB expected {expected_index}")
+
+            try:
+                db_block = BlockchainLedger(
+                    block_index=block.index,
+                    block_hash=block.hash,
+                    previous_hash=block.previous_hash,
+                    transaction_id=block.transactions[0].get("transaction_id") if block.transactions else None,
+                    payload_hash=block.payload_hash,
+                    timestamp=block.timestamp,
+                    nonce=block.nonce,
+                    validator=block.validator,
+                    network=block.network,
+                    mining_time=block.mining_time,
+                    is_valid=True
+                )
+                db.add(db_block)
+                db.commit()
+                self.pending_transactions = []
+                logger.info(f"[BLOCK_COMMIT] index={block.index} hash={block.hash[:10]}...")
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Failed to commit block {block.index}: {e}")
+                raise ValueError(f"Blockchain storage failure: {str(e)}")
+
     def discard_pending(self) -> None:
-        """Phase 2 Rollback: Abort current buffered memory safely."""
         with self.lock:
-            count = len(self.pending_transactions)
             self.pending_transactions = []
-            if count > 0:
-                logger.warning(f"Atomic rollback triggered: DISCARDED {count} pending transactions.")
 
-    def is_chain_valid(self) -> bool:
-        return is_chain_valid(self.chain, self.difficulty)
+    def is_chain_valid(self, db: Session) -> bool:
+        """Stateless validation reading entire DB ledger."""
+        return is_chain_valid_stateless(db, self.difficulty)
 
-    def get_latest_block(self) -> Block:
-        with self.lock:
-            return self.chain[-1]
-
-# Singleton instance
+# Singleton instance for pending TX management (shared memory for single process)
 blockchain = Blockchain()
+

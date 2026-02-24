@@ -21,7 +21,7 @@ export default function ReportsPage() {
     const fetchScheduled = async () => {
         try {
             setSchedLoading(true);
-            const res = await fetch(`${baseUrl}/api/admin/reports/scheduled`, {
+            const res = await fetch(`${baseUrl}/api/admin/schedule`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {

@@ -43,8 +43,23 @@ def get_activity_logs(
     total = query.count()
     logs = query.order_by(ActivityLog.timestamp.desc()).offset((page - 1) * limit).limit(limit).all()
 
+    # Convert SQLAlchemy instances to dictionary to satisfy Pydantic Dict[str, Any] response model
+    formatted_logs = []
+    for log in logs:
+        formatted_logs.append({
+            "id": log.id,
+            "admin_id": log.admin_id,
+            "action": log.action,
+            "target_type": log.target_type,
+            "target_id": log.target_id,
+            "district": log.district,
+            "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+            "ip_address": log.ip_address,
+            "metadata_info": log.metadata_info
+        })
+
     return {
-        "items": logs,
+        "items": formatted_logs,
         "total": total,
         "page": page,
         "limit": limit

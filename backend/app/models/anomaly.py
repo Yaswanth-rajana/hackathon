@@ -19,6 +19,7 @@ class Anomaly(Base):
     confidence = Column(Float, nullable=False)
 
     is_resolved = Column(Boolean, default=False)
+    is_simulated = Column(Boolean, nullable=False, default=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

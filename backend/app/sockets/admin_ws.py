@@ -1,7 +1,8 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import logging
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.services.event_emitter import manager
 
+# Initialize logger early
 logger = logging.getLogger(__name__)
 
 router = APIRouter()

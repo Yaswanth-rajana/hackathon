@@ -38,7 +38,7 @@ class AnalyticsService:
         query = db.query(
             Anomaly.anomaly_type,
             func.count(Anomaly.id).label("count")
-        )
+        ).filter(Anomaly.is_simulated == False)
         
         # Need to join with Shop to get district
         if district:
@@ -115,7 +115,7 @@ class AnalyticsService:
             compliance = max(0.0, min(100.0, compliance))
             
             compliance_items.append(MandalComplianceItem(
-                mandal=row.mandal,
+                mandal=row.mandal or "Unknown",
                 compliance_score=round(compliance, 2)
             ))
             
@@ -127,7 +127,7 @@ class AnalyticsService:
         Analyze complaints resolution time (exclude unresolved, handle 0 safely),
         fastest/slowest resolving mandals, and backlog count.
         """
-        base_query = db.query(Complaint)
+        base_query = db.query(Complaint).filter(Complaint.is_simulated == False)
         if district:
             base_query = base_query.join(Shop, Complaint.shop_id == Shop.id).filter(Shop.district == district)
             
@@ -165,7 +165,7 @@ class AnalyticsService:
         anomaly_query = db.query(
             Anomaly.anomaly_type,
             func.count(Anomaly.id).label("count")
-        ).filter(Anomaly.created_at >= time_window)
+        ).filter(Anomaly.created_at >= time_window, Anomaly.is_simulated == False)
         
         if district:
             anomaly_query = anomaly_query.join(Shop, Anomaly.shop_id == Shop.id).filter(Shop.district == district)
@@ -178,7 +178,7 @@ class AnalyticsService:
         shop_query = db.query(
             Anomaly.shop_id,
             func.count(Anomaly.id).label("count")
-        ).filter(Anomaly.created_at >= time_window)
+        ).filter(Anomaly.created_at >= time_window, Anomaly.is_simulated == False)
         
         if district:
              shop_query = shop_query.join(Shop, Anomaly.shop_id == Shop.id).filter(Shop.district == district)

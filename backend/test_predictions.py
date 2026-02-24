@@ -20,6 +20,21 @@ fraud_features = {
 }
 
 print("=== NORMAL FEATURES ===")
-print("Output:\n" + json.dumps(predict(normal_features), indent=2))
+normal_pred = predict(normal_features)
+print("Output:\n" + json.dumps(normal_pred, indent=2))
+
 print("\n=== FRAUD FEATURES ===")
-print("Output:\n" + json.dumps(predict(fraud_features), indent=2))
+fraud_pred = predict(fraud_features)
+print("Output:\n" + json.dumps(fraud_pred, indent=2))
+
+print("\n=== DETERMINISM CHECK ===")
+def get_core(pred):
+    return {k: v for k, v in pred.items() if k != "execution_time_ms"}
+
+core_normal = get_core(normal_pred)
+core_fraud = get_core(fraud_pred)
+
+for i in range(5):
+    assert get_core(predict(normal_features)) == core_normal
+    assert get_core(predict(fraud_features)) == core_fraud
+print("✅ Determinism Passed")

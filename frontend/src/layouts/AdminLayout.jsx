@@ -16,6 +16,7 @@ const ROUTE_LABELS = {
     'logs': 'Activity Logs',
     'dealers': 'Dealer Management',
     'explorer': 'Blockchain Explorer',
+    'simulation': 'Simulation Engine',
 };
 
 // ─── Navigation groups ───────────────────────────────────────────────────────
@@ -49,6 +50,12 @@ const NAV_GROUPS = [
         label: 'USER MANAGEMENT',
         items: [
             { to: '/admin/dealers', end: false, icon: '👥', text: 'Dealers' },
+        ],
+    },
+    {
+        label: 'TEST & DEMO',
+        items: [
+            { to: '/admin/simulation', end: false, icon: '⚡', text: 'Simulation' },
         ],
     },
 ];

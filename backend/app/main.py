@@ -18,6 +18,7 @@ from app.models.activity_log import ActivityLog  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
 from app.models.entitlement import Entitlement  # noqa: F401
 from app.models.idempotency import IdempotencyKey # noqa: F401
+from app.models.simulation import EntitlementSimulationBackup, SimulationEvent, SimulationBaseline # noqa: F401
 
 # Setup structured JSON logging
 structlog.configure(
@@ -33,6 +34,8 @@ logger = structlog.get_logger(__name__)
 # Create tables (for simplicity in sprint, though Alembic is PRO, 
 # prompt implicitly allows manual/auto creation. 
 # "Manually insert one dealer" implies tables must exist).
+from scripts.phase1_db_migration import run_migration
+run_migration()
 Base.metadata.create_all(bind=engine)
 
 from slowapi import _rate_limit_exceeded_handler
@@ -134,12 +137,24 @@ from app.routes.admin_reports_routes import router as admin_reports_router
 from app.routes.admin_schedule_routes import router as admin_schedule_router
 from app.routes.admin_forecast_routes import router as admin_forecast_router
 from app.routes.admin_dealer_routes import router as admin_dealer_router
+from app.routers.admin_simulation_router import router as admin_simulation_router
+from app.routers.admin_audit_router import router as admin_manual_audit_router
 
 app.include_router(admin_analytics_router, prefix="/api/admin/analytics", tags=["Admin Analytics"])
 app.include_router(admin_reports_router, prefix="/api/admin/reports", tags=["Admin Reports"])
 app.include_router(admin_schedule_router, prefix="/api/admin/schedule", tags=["Admin Schedule"])
 app.include_router(admin_forecast_router, prefix="/api/admin/forecast", tags=["Admin Forecast"])
 app.include_router(admin_dealer_router, prefix="/api/admin/dealers", tags=["Admin Dealers"])
+app.include_router(
+    admin_simulation_router,
+    prefix="/api/admin/simulate",
+    tags=["Admin Simulation"]
+)
+app.include_router(
+    admin_manual_audit_router,
+    prefix="/api/admin/audit",
+    tags=["Admin Audit"]
+)
 
 from app.utils.cache import init_redis_cache
 from app.services.blockchain.crypto import initialize_keys

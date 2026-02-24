@@ -229,6 +229,7 @@ def get_blockchain_recent(db: Session = Depends(get_db), admin: User = Depends(r
             transaction_id=tx.id,
             shop_id=tx.shop_id,
             type=tx.transaction_type or "Distribution",
+            block_index=tx.block_index,
             block_hash=tx.block_hash or "0x0",
             status="Verified"
         ))

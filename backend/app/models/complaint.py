@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, JSON, Text, ForeignKey, Integer
+from sqlalchemy import Column, String, DateTime, JSON, Text, ForeignKey, Integer, Boolean
 from datetime import datetime
 import uuid
 from app.database import Base
@@ -20,3 +20,4 @@ class Complaint(Base):
     resolution_notes = Column(Text, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    is_simulated = Column(Boolean, nullable=False, default=False, index=True)

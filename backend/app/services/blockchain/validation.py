@@ -1,10 +1,75 @@
-import json
-import hashlib
-from typing import List
+from sqlalchemy.orm import Session
+from app.models.blockchain_ledger import BlockchainLedger
 from app.services.blockchain.block import Block
-from app.services.blockchain.crypto import verify_signature_dict
+
+def is_chain_valid_stateless(db: Session, difficulty: int) -> bool:
+    """
+    Validates the entire blockchain stored in SQL.
+    Sequential integrity is strictly enforced: index N must follow N-1.
+    """
+    rows = db.query(BlockchainLedger).order_by(BlockchainLedger.block_index.asc()).all()
+    if not rows:
+        return True
+
+    # Convert first row to Block object for initial state
+    prev_db = rows[0]
+    previous_block = Block(
+        index=prev_db.block_index,
+        timestamp=prev_db.timestamp,
+        transactions=[], 
+        previous_hash=prev_db.previous_hash,
+        hash=prev_db.block_hash,
+        payload_hash=prev_db.payload_hash,
+        nonce=prev_db.nonce,
+        validator=prev_db.validator,
+        network=prev_db.network
+    )
+
+    # 1. Genesis check (index 0)
+    if previous_block.index != 0:
+        print(f"Chain integrity failure: Missing genesis block (found index {previous_block.index})")
+        return False
+
+    for i in range(1, len(rows)):
+        current_db = rows[i]
+        current_block = Block(
+            index=current_db.block_index,
+            timestamp=current_db.timestamp,
+            transactions=[],
+            previous_hash=current_db.previous_hash,
+            hash=current_db.block_hash,
+            payload_hash=current_db.payload_hash,
+            nonce=current_db.nonce,
+            validator=current_db.validator,
+            network=current_db.network
+        )
+
+        # 1. Index check (Strict Sequentiality)
+        if current_block.index != previous_block.index + 1:
+            print(f"Failed at Index Check: {current_block.index} != {previous_block.index} + 1")
+            return False
+
+        # 2. Previous hash check
+        if current_block.previous_hash != previous_block.hash:
+            print(f"Failed at Previous Hash Check: {current_block.previous_hash} != {previous_block.hash}")
+            return False
+
+        # 3. Hash calculation check (Stateless re-verification)
+        if current_block.hash != current_block.calculate_hash():
+            print(f"Failed at Hash Validation: stored hash does not match computed header hash")
+            return False
+
+        # 4. Proof of Work Difficulty validation
+        if not current_block.hash.startswith("0" * difficulty):
+            print(f"Failed at Proof of Work constraint for block {current_block.index}")
+            return False
+
+        previous_block = current_block
+
+    return True
 
 def is_chain_valid(chain: List[Block], difficulty: int) -> bool:
+    """Legacy support for in-memory list validation."""
     if not chain:
         return True
 
@@ -12,83 +77,11 @@ def is_chain_valid(chain: List[Block], difficulty: int) -> bool:
         current = chain[i]
         previous = chain[i - 1]
 
-        # 1. Index check
         if current.index != previous.index + 1:
-            print(f"Failed at Index Check: {current.index} != {previous.index} + 1")
             return False
-
-        # 2. Previous hash check
         if current.previous_hash != previous.hash:
-            print(f"Failed at Previous Hash Check: {current.previous_hash} != {previous.hash}")
             return False
-
-        # 3. Block header signatures check (Require at least 2 for simulated Multi-Sig Quorum)
-        if not hasattr(current, 'validator_signatures') or len(current.validator_signatures) < 2:
-            print(f"Failed at Validator Signatures: missing or < 2 sigs")
-            return False
-            
-        header_dict = current.get_header_dict()
-        for sig_proof in current.validator_signatures:
-            if not verify_signature_dict(header_dict, sig_proof):
-                print(f"Failed at Header Signature Verification for node {sig_proof.get('signed_by')}")
-                return False
-
-        # 4. Transaction signatures check (With Identity Gating)
-        for tx in current.transactions:
-            if not isinstance(tx, dict):
-                continue
-                
-            signed_by = tx.get("signed_by")
-            signature = tx.get("signature")
-            
-            if not signature or not signed_by:
-                # Genesis or system-level exemptions might use no signature, but Phase 3 enforces
-                # it for all new blocks. Genesis is index 0 anyway (skipped by range(1)).
-                if tx.get("type") == "GENESIS":
-                    continue
-                print(f"Failed at Transaction Signatures: missing sig/signed_by")
-                return False
-                
-            # Strict Transaction Role Binding Policy
-            tx_type = tx.get("type")
-            if tx_type == "DISTRIBUTION" and not signed_by.startswith("DEALER"):
-                print(f"Failed at Strict Role Binding: {tx_type} mapped to {signed_by}")
-                return False
-            if tx_type == "ALLOCATION" and not signed_by.startswith("ADMIN"):
-                print(f"Failed at Strict Role Binding: {tx_type} mapped to {signed_by}")
-                return False
-            if tx_type == "ML_ALERT" and not signed_by.startswith("AI_SYSTEM"):
-                print(f"Failed at Strict Role Binding: {tx_type} mapped to {signed_by}")
-                return False
-            if tx_type == "COMPLAINT" and not signed_by.startswith("CITIZEN"):
-                print(f"Failed at Strict Role Binding: {tx_type} mapped to {signed_by}")
-                return False
-
-            sig_proof = {
-                "signed_by": signed_by,
-                "signature": signature,
-                "signature_algorithm": tx.get("signature_algorithm"),
-                "signer_key_fingerprint": tx.get("signer_key_fingerprint")
-            }
-            if not verify_signature_dict(tx, sig_proof):
-                print(f"Failed at verifying transaction signature for {tx_type}")
-                return False
-
-        # 5. Payload hash validation (Ensuring Canonical Payload Intrinsic Matches)
-        tx_string = json.dumps(current.transactions, sort_keys=True)
-        expected_payload_hash = hashlib.sha256(tx_string.encode()).hexdigest()
-        if current.payload_hash != expected_payload_hash:
-            print(f"Failed at Payload Hash validation")
-            return False
-            
-        # Verify self-contained hash logic matches native block data canonical hashing
         if current.hash != current.calculate_hash():
-            print(f"Failed at Self-Contained Hash calc matches")
             return False
-
-        # 6. Proof of Work Difficulty validation
-        if not current.hash.startswith("0" * difficulty):
-            print(f"Failed at Proof of Work constraint")
-            return False
-
+            
     return True

@@ -34,7 +34,9 @@ class ReportService:
         # We need some dummy or aggregated data for the PDF
         anomaly_dist = db.query(
             Anomaly.anomaly_type, func.count(Anomaly.id)
-        ).join(Shop, Anomaly.shop_id == Shop.id).filter(Shop.district == district).group_by(Anomaly.anomaly_type).all()
+        ).join(Shop, Anomaly.shop_id == Shop.id).filter(
+            Shop.district == district, Anomaly.is_simulated == False
+        ).group_by(Anomaly.anomaly_type).all()
 
         # Add Anomaly Table
         elements.append(Paragraph("Anomaly Distribution", styles['Heading3']))
@@ -97,7 +99,7 @@ class ReportService:
         elements.append(Spacer(1, 20))
 
         # Complaints
-        complaints_count = db.query(Complaint).filter(Complaint.shop_id == shop_id).count()
+        complaints_count = db.query(Complaint).filter(Complaint.shop_id == shop_id, Complaint.is_simulated == False).count()
         elements.append(Paragraph(f"Total Complaints Received: {complaints_count}", styles['Normal']))
         
         doc.build(elements)
@@ -113,7 +115,7 @@ class ReportService:
         buffer = BytesIO()
         
         # 1. Anomalies Data
-        query = db.query(Anomaly.shop_id, Anomaly.anomaly_type, Anomaly.severity, Anomaly.created_at)
+        query = db.query(Anomaly.shop_id, Anomaly.anomaly_type, Anomaly.severity, Anomaly.created_at).filter(Anomaly.is_simulated == False)
         if district:
             query = query.join(Shop, Anomaly.shop_id == Shop.id).filter(Shop.district == district)
             

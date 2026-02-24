@@ -27,6 +27,8 @@ class Beneficiary(Base):
     mandal = Column(String(50), nullable=True)
 
     shop_id = Column(String(20), nullable=False, index=True)
+    
+    is_simulated = Column(Boolean, nullable=False, default=False, index=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

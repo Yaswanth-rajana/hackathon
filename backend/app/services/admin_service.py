@@ -25,10 +25,10 @@ def get_dashboard_summary(db: Session) -> dict:
     ) or 0
 
     total_transactions = db.query(func.count(Transaction.id)).scalar() or 0
-    total_beneficiaries = db.query(func.count(Beneficiary.ration_card)).scalar() or 0
+    total_beneficiaries = db.query(func.count(Beneficiary.ration_card)).filter(Beneficiary.is_simulated == False).scalar() or 0
     total_anomalies = (
         db.query(func.count(Anomaly.id))
-        .filter(Anomaly.is_resolved == False)  # noqa: E712
+        .filter(Anomaly.is_resolved == False, Anomaly.is_simulated == False)  # noqa: E712
         .scalar()
     ) or 0
 
@@ -92,7 +92,7 @@ def get_recent_anomalies(db: Session, limit: int = 20) -> list[dict]:
 
     rows = (
         db.query(Anomaly)
-        .filter(Anomaly.is_resolved == False)  # noqa: E712
+        .filter(Anomaly.is_resolved == False, Anomaly.is_simulated == False)  # noqa: E712
         .order_by(severity_order, Anomaly.created_at.desc())
         .limit(limit)
         .all()

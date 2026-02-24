@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.models.shop import Shop
 from app.models.risk_score import RiskScore
 from app.models.complaint import Complaint
@@ -16,9 +16,9 @@ class RecommendationService:
         shops = db.query(Shop).filter(Shop.district == district).all()
         recommendations = []
         
-        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-        seven_days_ago = datetime.utcnow() - timedelta(days=7)
-        six_months_ago = datetime.utcnow() - timedelta(days=180)
+        thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+        seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        six_months_ago = datetime.now(timezone.utc) - timedelta(days=180)
         
         for shop in shops:
             reasons = []
@@ -27,8 +27,8 @@ class RecommendationService:
             
             # Risk Score Check
             risk = db.query(RiskScore).filter(RiskScore.shop_id == shop.id).order_by(RiskScore.calculated_at.desc()).first()
-            if risk and risk.score >= 85:
-                reasons.append(f"High risk score: {risk.score}")
+            if risk and risk.risk_score >= 85:
+                reasons.append(f"High risk score: {risk.risk_score}")
                 confidence += 40
                 priority = "high"
                 

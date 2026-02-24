@@ -11,16 +11,22 @@ from app.models.entitlement import Entitlement
 
 logger = logging.getLogger(__name__)
 
-def extract_shop_features(db: Session, shop_id: str) -> Dict[str, float]:
+def extract_shop_features(db: Session, shop_id: str, include_simulated: bool = False) -> Dict[str, float]:
     """
     Extract deterministic, fast, database-driven features for a given shop.
     Returns structured numeric features used for ML models or risk scoring.
     """
     try:
         # 1. Total Beneficiaries
-        beneficiaries_count = db.query(func.count(Beneficiary.ration_card))\
-            .filter(Beneficiary.shop_id == shop_id)\
-            .scalar() or 0
+        b_query = db.query(func.count(Beneficiary.ration_card)).filter(Beneficiary.shop_id == shop_id)
+        if not include_simulated:
+            b_query = b_query.filter(Beneficiary.is_simulated == False)
+        beneficiaries_count = b_query.scalar() or 0
+        
+        expected_beneficiaries = db.query(func.count(Beneficiary.ration_card)).filter(
+            Beneficiary.shop_id == shop_id, 
+            Beneficiary.is_simulated == False
+        ).scalar() or 0
 
         # 2., 3., 4., 5., 7. Total, Night, Weekend, Monthly Transactions & Distributed Quantity
         # Optimizing memory by avoiding full ORM object loading
@@ -71,9 +77,12 @@ def extract_shop_features(db: Session, shop_id: str) -> Dict[str, float]:
 
         # 5. Total Allocated
         # We compute this by joining Entitlement across all Beneficiaries for the shop
-        allocations = db.query(Entitlement.wheat, Entitlement.rice, Entitlement.sugar)\
+        alloc_query = db.query(Entitlement.wheat, Entitlement.rice, Entitlement.sugar)\
             .join(Beneficiary, Entitlement.ration_card == Beneficiary.ration_card)\
-            .filter(Beneficiary.shop_id == shop_id).all()
+            .filter(Beneficiary.shop_id == shop_id)
+        if not include_simulated:
+            alloc_query = alloc_query.filter(Beneficiary.is_simulated == False)
+        allocations = alloc_query.all()
         
         total_allocated = sum(
             float(a.wheat or 0) + float(a.rice or 0) + float(a.sugar or 0) 
@@ -81,9 +90,10 @@ def extract_shop_features(db: Session, shop_id: str) -> Dict[str, float]:
         )
 
         # 6. Total Complaints
-        complaints_count = db.query(func.count(Complaint.id))\
-            .filter(Complaint.shop_id == shop_id)\
-            .scalar() or 0
+        c_query = db.query(func.count(Complaint.id)).filter(Complaint.shop_id == shop_id)
+        if not include_simulated:
+            c_query = c_query.filter(Complaint.is_simulated == False)
+        complaints_count = c_query.scalar() or 0
 
         # 7. Distribution Variance
         values = list(monthly_totals.values())
@@ -95,8 +105,6 @@ def extract_shop_features(db: Session, shop_id: str) -> Dict[str, float]:
             variance = 0.0
 
         # FEATURE CALCULATIONS
-        expected_beneficiaries = beneficiaries_count
-        
         ghost_ratio = (
             float(beneficiaries_count) / float(expected_beneficiaries)
             if expected_beneficiaries > 0 else 1.0
@@ -118,8 +126,8 @@ def extract_shop_features(db: Session, shop_id: str) -> Dict[str, float]:
         )
         
         complaint_rate = (
-            float(complaints_count) / float(beneficiaries_count) * 100.0
-            if beneficiaries_count > 0 else 0.0
+            float(complaints_count) / float(expected_beneficiaries) * 100.0
+            if expected_beneficiaries > 0 else 0.0
         )
         
         consistency_score = 1.0 / (variance + 0.01)
@@ -131,7 +139,7 @@ def extract_shop_features(db: Session, shop_id: str) -> Dict[str, float]:
             "night_ratio": max(0.0, min(night_ratio, 1.0)),
             "weekend_ratio": max(0.0, min(weekend_ratio, 1.0)),
             "complaint_rate": max(0.0, min(complaint_rate, 100.0)),
-            "consistency_score": max(0.0, min(consistency_score, 100.0))
+            "consistency_score": max(0.0, min(consistency_score, 10.0))
         }
 
     except Exception as e:

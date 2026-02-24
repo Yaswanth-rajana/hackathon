@@ -95,10 +95,10 @@ class ForecastService:
         sixty_days_ago = now - timedelta(days=60)
         
         # Current 30 days
-        curr_query = db.query(Anomaly).filter(Anomaly.created_at >= thirty_days_ago)
+        curr_query = db.query(Anomaly).filter(Anomaly.created_at >= thirty_days_ago, Anomaly.is_simulated == False)
         
         # Previous 30 days
-        prev_query = db.query(Anomaly).filter(Anomaly.created_at >= sixty_days_ago, Anomaly.created_at < thirty_days_ago)
+        prev_query = db.query(Anomaly).filter(Anomaly.created_at >= sixty_days_ago, Anomaly.created_at < thirty_days_ago, Anomaly.is_simulated == False)
         
         if district:
              curr_query = curr_query.join(Shop, Anomaly.shop_id == Shop.id).filter(Shop.district == district)

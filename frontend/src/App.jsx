@@ -20,6 +20,7 @@ const ReportsPage = lazy(() => import("./pages/admin/ReportsPage"));
 const ForecastPage = lazy(() => import("./pages/admin/ForecastPage"));
 const DealersPage = lazy(() => import("./pages/admin/DealersPage"));
 const ExplorerPage = lazy(() => import("./pages/admin/ExplorerPage"));
+const SimulationPage = lazy(() => import("./pages/admin/SimulationPage"));
 
 const CitizenDashboard = lazy(() => import("./pages/CitizenDashboard"));
 
@@ -144,6 +145,13 @@ function App() {
             <ErrorBoundary>
               <React.Suspense fallback={<div>Loading Ledger...</div>}>
                 <ExplorerPage />
+              </React.Suspense>
+            </ErrorBoundary>
+          } />
+          <Route path="simulation" element={
+            <ErrorBoundary>
+              <React.Suspense fallback={<div>Loading Simulation...</div>}>
+                <SimulationPage />
               </React.Suspense>
             </ErrorBoundary>
           } />

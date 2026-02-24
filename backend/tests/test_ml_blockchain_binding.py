@@ -34,6 +34,8 @@ def db_session():
     finally:
         db.close()
 
+from app.models.risk_score import RiskScore
+
 def setup_shop_data(db_session: Session, shop_id: str, is_fraud: bool):
     # Clean up
     db_session.query(Transaction).filter(Transaction.shop_id == shop_id).delete()
@@ -45,6 +47,7 @@ def setup_shop_data(db_session: Session, shop_id: str, is_fraud: bool):
     db_session.query(Complaint).filter(Complaint.shop_id == shop_id).delete(synchronize_session=False)
     db_session.query(Anomaly).filter(Anomaly.shop_id == shop_id).delete()
     db_session.query(Beneficiary).filter(Beneficiary.shop_id == shop_id).delete()
+    db_session.query(RiskScore).filter(RiskScore.shop_id == shop_id).delete()
     db_session.query(Shop).filter(Shop.id == shop_id).delete()
     db_session.commit()
     

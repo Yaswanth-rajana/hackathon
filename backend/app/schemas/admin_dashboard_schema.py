@@ -46,5 +46,6 @@ class BlockchainRecentResponse(BaseModel):
     transaction_id: str
     shop_id: str
     type: str
+    block_index: int
     block_hash: str
     status: str
