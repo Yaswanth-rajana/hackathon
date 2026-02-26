@@ -36,7 +36,7 @@ def get_already_received(db: Session, ration_card: str, current_month: str = Non
         func.coalesce(func.sum(Transaction.items["sugar"].as_float()), 0).label("sugar")
     ).filter(
         Transaction.ration_card == ration_card,
-        Transaction.transaction_type == "distribution",
+        Transaction.transaction_type == "DISTRIBUTION",
         Transaction.timestamp >= start_date
     ).first()
 
@@ -45,3 +45,34 @@ def get_already_received(db: Session, ration_card: str, current_month: str = Non
         "rice": result.rice,
         "sugar": result.sugar
     }
+def check_cash_transfer_exists(db: Session, ration_card: str, current_month: str = None) -> bool:
+    if not current_month:
+        current_month = datetime.utcnow().strftime("%Y-%m")
+        
+    start_date = datetime.strptime(f"{current_month}-01", "%Y-%m-%d")
+    
+    exists = db.query(Transaction).filter(
+        Transaction.ration_card == ration_card,
+        Transaction.transaction_type == "CASH_TRANSFER",
+        Transaction.timestamp >= start_date
+    ).first() is not None
+    
+    return exists
+
+def get_beneficiary_history(db: Session, ration_card: str, limit: int = 5) -> list:
+    """Fetch recent transaction history for a beneficiary."""
+    txs = db.query(Transaction).filter(
+        Transaction.ration_card == ration_card
+    ).order_by(Transaction.timestamp.desc()).limit(limit).all()
+    
+    formatted_history = []
+    for tx in txs:
+        formatted_history.append({
+            "transaction_id": tx.id,
+            "timestamp": tx.timestamp,
+            "transaction_type": tx.transaction_type,
+            "block_index": tx.block_index,
+            "notes": tx.notes,
+            "items": tx.items
+        })
+    return formatted_history

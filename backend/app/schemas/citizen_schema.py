@@ -12,6 +12,13 @@ class CitizenProfileResponse(BaseModel):
     shop_id: str
     account_status: str
 
+class CashCompensation(BaseModel):
+    amount: float
+    date: datetime
+    block: int
+    txn_hash: str
+    verified: bool
+
 
 class CitizenTransactionItem(BaseModel):
     transaction_id: str
@@ -33,6 +40,15 @@ class EntitlementResponse(BaseModel):
     sugar_total: float
     sugar_remaining: float
     status: str
+    is_settled: bool
+    last_txn_hash: Optional[str] = None
+    last_txn_block: Optional[int] = None
+    cash_compensation: Optional[CashCompensation] = None
+    short_distribution_reason: Optional[str] = None
+    last_distribution_date: Optional[datetime] = None
+    shop_risk_level: str = "NORMAL"
+    shop_warning: Optional[str] = None
+    recent_activity: List[Dict[str, Any]] = []
 
 class ShopDetailsResponse(BaseModel):
     name: str
@@ -41,19 +57,31 @@ class ShopDetailsResponse(BaseModel):
     timings: str
     rating: float
     risk_score: float
+    shop_risk_level: str = "NORMAL"
+    shop_warning: Optional[str] = None
+    active_grievances: int = 0
 
 class ComplaintCreateRequest(BaseModel):
     complaint_type: str
     description: Optional[str] = None
     shop_id: Optional[str] = None
+    severity: str = "minor"
+    is_anonymous: bool = False
+    attachment_url: Optional[str] = None
 
 class ComplaintResponse(BaseModel):
     id: str
     complaint_type: str
     description: Optional[str]
     status: str
+    severity: str
+    is_anonymous: bool
+    attachment_url: Optional[str] = None
+    district: str
+    block_index: Optional[int] = None
+    block_hash: Optional[str] = None
     created_at: datetime
-    resolution_notes: Optional[str]
+    resolution_notes: Optional[str] = None
 
 class NotificationResponse(BaseModel):
     id: int

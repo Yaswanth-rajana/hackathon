@@ -8,6 +8,7 @@ from app.schemas.simulation import (
     StockMismatchRequest,
     ComplaintSpikeRequest
 )
+from app.utils.demo_guard import enforce_demo_mode
 
 router = APIRouter()
 
@@ -18,6 +19,7 @@ def inject_ghosts(
     db: Session = Depends(get_db),
     current_user = Depends(require_admin)
 ):
+    enforce_demo_mode(shop_id)
     try:
         return SimulationService.inject_ghost_beneficiaries(
             db=db,
@@ -37,6 +39,7 @@ def inject_mismatch(
     db: Session = Depends(get_db),
     current_user = Depends(require_admin)
 ):
+    enforce_demo_mode(shop_id)
     try:
         return SimulationService.inject_stock_mismatch(
             db=db,
@@ -56,6 +59,7 @@ def inject_complaints(
     db: Session = Depends(get_db),
     current_user = Depends(require_admin)
 ):
+    enforce_demo_mode(shop_id)
     try:
         return SimulationService.inject_complaint_spike(
             db=db,
@@ -74,6 +78,7 @@ def reset_simulation(
     db: Session = Depends(get_db),
     current_user = Depends(require_admin)
 ):
+    enforce_demo_mode(shop_id)
     try:
         return SimulationService.reset_simulation(
             db=db,
@@ -88,6 +93,7 @@ def get_simulation_events(
     db: Session = Depends(get_db),
     current_user = Depends(require_admin)
 ):
+    enforce_demo_mode(shop_id)
     try:
         from app.models.simulation import SimulationEvent
         events = db.query(SimulationEvent).filter(

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
 from datetime import datetime
@@ -32,23 +32,24 @@ router = APIRouter(
     dependencies=[Depends(require_role(UserRole.admin))]
 )
 
-def _emit(district, event_type, audit_id):
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(manager.emit_event(district, event_type, audit_id, "audit"))
-    except RuntimeError:
-        asyncio.run(manager.emit_event(district, event_type, audit_id, "audit"))
+def _emit(district, event_type, audit_id, background_tasks: BackgroundTasks):
+    background_tasks.add_task(manager.emit_event, district, event_type, audit_id, "audit")
 
 @router.post("/schedule", response_model=Dict[str, Any])
 @audit_logger(action="SCHEDULE_AUDIT", target_type="audit")
 def schedule_audit(
     request_data: ScheduleAuditRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Verify shop exists and is in admin's district
-    shop = db.query(Shop).filter(Shop.id == request_data.shop_id, Shop.district == current_user.district).first()
+    # Verify shop exists and is in admin's district (Skip district check for HQ)
+    shop_query = db.query(Shop).filter(Shop.id == request_data.shop_id)
+    if current_user.district and current_user.district != "HQ":
+        shop_query = shop_query.filter(Shop.district == current_user.district)
+    
+    shop = shop_query.first()
     if not shop:
         raise HTTPException(404, "Shop not found or outside your district")
         
@@ -64,12 +65,13 @@ def schedule_audit(
     db.commit()
     db.refresh(audit)
     
-    _emit(current_user.district, "AUDIT_SCHEDULED", str(audit.id))
+    _emit(shop.district, "AUDIT_SCHEDULED", str(audit.id), background_tasks)
     
     return {"id": audit.id, "message": "Audit scheduled successfully"}
 
 @router.get("", response_model=AuditListResponse)
 def get_audits(
+    district: Optional[str] = Query(None, description="Filter by district"),
     status: Optional[str] = None,
     shop_id: Optional[str] = None,
     page: int = 1,
@@ -77,7 +79,11 @@ def get_audits(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(Audit).join(Shop, Shop.id == Audit.shop_id).filter(Shop.district == current_user.district)
+    target_district = district if (current_user.district == "HQ" and district) else current_user.district
+    
+    query = db.query(Audit).join(Shop, Shop.id == Audit.shop_id)
+    if target_district and target_district != "HQ":
+        query = query.filter(Shop.district == target_district)
     
     if status:
         query = query.filter(Audit.status == status)
@@ -121,10 +127,15 @@ def complete_audit(
     id: int,
     request_data: CompleteAuditRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    audit = db.query(Audit).join(Shop).filter(Audit.id == id, Shop.district == current_user.district).first()
+    query = db.query(Audit).join(Shop).filter(Audit.id == id)
+    if current_user.district and current_user.district != "HQ":
+        query = query.filter(Shop.district == current_user.district)
+        
+    audit = query.first()
     if not audit:
         raise HTTPException(404, "Audit not found or unauthorized")
         
@@ -159,6 +170,6 @@ def complete_audit(
     
     AnalyticsAggregator.update_monthly_risk_average(db, current_user.district)
     
-    _emit(current_user.district, "AUDIT_COMPLETED", str(audit.id))
+    _emit(audit.shop.district if hasattr(audit, 'shop') else current_user.district, "AUDIT_COMPLETED", str(audit.id), background_tasks)
     
     return {"id": audit.id, "message": "Audit completed", "new_risk_score": new_score_val}

@@ -51,7 +51,7 @@ def _validate_shop_assignment(db: Session, shop_id: str, admin_district: str, ma
         db.add(shop)
         db.flush()
 
-    if shop.district and admin_district and shop.district != admin_district:
+    if shop.district and admin_district and admin_district != "HQ" and shop.district != admin_district:
         raise HTTPException(
             status_code=403,
             detail="Shop does not belong to your district"
@@ -196,7 +196,7 @@ def create_dealer(
         email=payload.email,
         mobile=payload.mobile,
         role=UserRole.dealer,
-        district=admin_user.district,
+        district=shop.district or admin_user.district,
         shop_id=payload.shop_id,
         password_hash=hashed,
         is_active=True,
@@ -211,10 +211,11 @@ def create_dealer(
     # Assign dealer to shop
     shop.dealer_id = dealer_id
 
-    _log_action(db, admin_user.id, "dealer.created", dealer_id, admin_user.district,
+    target_district = shop.district or admin_user.district
+    _log_action(db, admin_user.id, "dealer.created", dealer_id, target_district,
                 extra={"shop_id": payload.shop_id, "mandal": payload.mandal})
     _create_notification(
-        db, admin_user.district,
+        db, target_district,
         f"New dealer '{payload.name}' created and assigned to shop {payload.shop_id}.",
         "SYSTEM", "info",
     )
@@ -232,6 +233,7 @@ def list_dealers(
     limit: int = 20,
     status_filter: Optional[str] = None,
     mandal_filter: Optional[str] = None,
+    district_filter: Optional[str] = None,
     search: Optional[str] = None,
 ) -> DealerListResponse:
     """Paginated list of dealers with shop name join."""
@@ -242,8 +244,9 @@ def list_dealers(
     )
 
     # District scope
-    if admin_user.district:
-        query = query.filter(User.district == admin_user.district)
+    target_district = district_filter if (admin_user.district == "HQ" and district_filter) else admin_user.district
+    if target_district and target_district != "HQ":
+        query = query.filter(User.district == target_district)
 
     if status_filter:
         query = query.filter(User.dealer_status == status_filter)
@@ -310,7 +313,8 @@ def update_dealer(
     if payload.dealer_status:
         user.dealer_status = payload.dealer_status
 
-    _log_action(db, admin_user.id, "dealer.updated", dealer_id, admin_user.district)
+    target_district = user.district or admin_user.district
+    _log_action(db, admin_user.id, "dealer.updated", dealer_id, target_district)
     db.commit()
     db.refresh(user)
     shop_name = db.query(Shop.name).filter(Shop.id == user.shop_id).scalar()
@@ -324,9 +328,10 @@ def suspend_dealer(db: Session, dealer_id: str, admin_user: User) -> dict:
         return {"message": "Dealer is already suspended (idempotent)", "dealer_id": dealer_id}
 
     user.dealer_status = "suspended"
-    _log_action(db, admin_user.id, "dealer.suspended", dealer_id, admin_user.district)
+    target_district = user.district or admin_user.district
+    _log_action(db, admin_user.id, "dealer.suspended", dealer_id, target_district)
     _create_notification(
-        db, admin_user.district,
+        db, target_district,
         f"Dealer '{user.name}' (ID: {dealer_id}) has been suspended by admin.",
         "SYSTEM", "warning",
     )
@@ -349,9 +354,10 @@ def reactivate_dealer(db: Session, dealer_id: str, admin_user: User) -> dict:
             )
 
     user.dealer_status = "active"
-    _log_action(db, admin_user.id, "dealer.reactivated", dealer_id, admin_user.district)
+    target_district = user.district or admin_user.district
+    _log_action(db, admin_user.id, "dealer.reactivated", dealer_id, target_district)
     _create_notification(
-        db, admin_user.district,
+        db, target_district,
         f"Dealer '{user.name}' (ID: {dealer_id}) has been reactivated.",
         "SYSTEM", "info",
     )
@@ -371,9 +377,10 @@ def reset_password(db: Session, dealer_id: str, admin_user: User) -> str:
     user.must_change_password = True
     user.last_password_reset = datetime.now(timezone.utc)
 
+    target_district = user.district or admin_user.district
     # Log the action — but NEVER log the password itself
     _log_action(
-        db, admin_user.id, "dealer.password_reset", dealer_id, admin_user.district,
+        db, admin_user.id, "dealer.password_reset", dealer_id, target_district,
         extra={"note": "Password reset by admin. Temp password not stored."}
     )
     # No notification created to avoid info leakage about the reset
@@ -388,8 +395,9 @@ def _get_dealer_or_404(db: Session, dealer_id: str, admin_user: User) -> User:
     user = db.query(User).filter(User.id == dealer_id, User.role == UserRole.dealer).first()
     if not user:
         raise HTTPException(status_code=404, detail="Dealer not found")
-    if admin_user.district and user.district != admin_user.district:
+    if admin_user.district and admin_user.district != "HQ" and user.district != admin_user.district:
         raise HTTPException(status_code=403, detail="Dealer not in your district")
+    return user
 # ─── New Phase 2 Helpers ────────────────────────────────────────────────────────
 
 def allocate_stock(db: Session, shop_id: str, admin_user: User, payload: dict) -> dict:
@@ -443,8 +451,9 @@ def allocate_stock(db: Session, shop_id: str, admin_user: User, payload: dict) -
             shop.stock_sugar += sugar_alloc
             shop.stock_kerosene += kerosene_alloc
             
+            target_district = shop.district or admin_user.district
             # Step 3: Record Audit Entry logging trace hash logic if required.
-            _log_action(db, admin_user.id, "shop.allocated", shop.id, admin_user.district, extra={
+            _log_action(db, admin_user.id, "shop.allocated", shop.id, target_district, extra={
                 "allocation_id": allocation_id,
                 "block_hash": block.hash,
                 "added": {

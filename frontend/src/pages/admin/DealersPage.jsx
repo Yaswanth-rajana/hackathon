@@ -291,7 +291,7 @@ function ActionMenu({ dealer, onEdit, onSuspend, onReactivate, onReset }) {
                 Actions ▾
             </button>
             {open && (
-                <div style={{ position: 'absolute', right: 0, top: '110%', backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '0.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: '160px', zIndex: 50, padding: '0.25rem' }}>
+                <div style={{ position: 'absolute', right: 0, top: '110%', backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '0.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: '160px', zIndex: 999, padding: '0.25rem' }}>
                     {[
                         { label: '✏️ Edit', action: onEdit },
                         isSuspended
@@ -482,9 +482,9 @@ export default function DealersPage() {
                     )}
                 </div>
             ) : (
-                <div style={{ backgroundColor: '#fff', borderRadius: '0.5rem', border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                <div style={{ backgroundColor: '#fff', borderRadius: '0.5rem', border: '1px solid #e5e7eb', overflow: 'visible', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                     {/* Table header */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.2fr 0.9fr 0.9fr 1.3fr 1fr 0.8fr', gap: '0', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.2fr 0.9fr 0.9fr 1.3fr 1fr 0.8fr', gap: '0', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', borderTopLeftRadius: '0.5rem', borderTopRightRadius: '0.5rem' }}>
                         {['Dealer', 'Shop', 'Mandal', 'Status', 'License Validity', 'Last Login', 'Actions'].map(h => (
                             <div key={h} style={{ padding: '0.75rem 1rem', fontSize: '0.7rem', fontWeight: '800', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</div>
                         ))}
@@ -497,6 +497,10 @@ export default function DealersPage() {
                             gap: 0, borderBottom: idx < dealers.length - 1 ? '1px solid #f3f4f6' : 'none',
                             alignItems: 'center',
                             backgroundColor: idx % 2 === 0 ? '#fff' : '#fafafa',
+                            borderBottomLeftRadius: (idx === dealers.length - 1 && totalPages <= 1) ? '0.5rem' : 0,
+                            borderBottomRightRadius: (idx === dealers.length - 1 && totalPages <= 1) ? '0.5rem' : 0,
+                            position: 'relative',
+                            zIndex: dealers.length - idx // Ensure earlier rows stack above later rows so dropdowns overlap correctly
                         }}>
                             {/* Dealer */}
                             <div style={{ padding: '0.875rem 1rem' }}>
@@ -544,7 +548,7 @@ export default function DealersPage() {
 
                     {/* Pagination */}
                     {totalPages > 1 && (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.875rem 1rem', borderTop: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.875rem 1rem', borderTop: '1px solid #e5e7eb', backgroundColor: '#f9fafb', borderBottomLeftRadius: '0.5rem', borderBottomRightRadius: '0.5rem' }}>
                             <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>
                                 Page {page} of {totalPages} · {total} total dealers
                             </span>

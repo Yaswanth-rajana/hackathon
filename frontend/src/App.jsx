@@ -21,16 +21,21 @@ const ForecastPage = lazy(() => import("./pages/admin/ForecastPage"));
 const DealersPage = lazy(() => import("./pages/admin/DealersPage"));
 const ExplorerPage = lazy(() => import("./pages/admin/ExplorerPage"));
 const SimulationPage = lazy(() => import("./pages/admin/SimulationPage"));
+const SettingsPage = lazy(() => import("./pages/admin/SettingsPage"));
+const AlertsPage = lazy(() => import("./pages/admin/AlertsPage"));
+const InspectionsPage = lazy(() => import("./pages/admin/governance/InspectionsPage"));
 
 const CitizenDashboard = lazy(() => import("./pages/CitizenDashboard"));
+const UpdateMobilePage = lazy(() => import("./pages/citizen/UpdateMobilePage"));
+const UpdatePinPage = lazy(() => import("./pages/citizen/UpdatePinPage"));
 
 function App() {
   return (
     <>
       <Alert />
       <Routes>
-        <Route path="/dealer/login" element={<DealerLogin />} />
-        <Route path="/login" element={<Navigate to="/dealer/login" replace />} />
+        <Route path="/login" element={<DealerLogin />} />
+        <Route path="/dealer/login" element={<Navigate to="/login" replace />} />
 
         <Route
           path="/dealer/dashboard"
@@ -58,6 +63,30 @@ function App() {
             </CitizenProtectedRoute>
           }
         />
+        <Route
+          path="/citizen/update-mobile"
+          element={
+            <CitizenProtectedRoute>
+              <ErrorBoundary>
+                <React.Suspense fallback={<div>Loading...</div>}>
+                  <UpdateMobilePage />
+                </React.Suspense>
+              </ErrorBoundary>
+            </CitizenProtectedRoute>
+          }
+        />
+        <Route
+          path="/citizen/update-pin"
+          element={
+            <CitizenProtectedRoute>
+              <ErrorBoundary>
+                <React.Suspense fallback={<div>Loading...</div>}>
+                  <UpdatePinPage />
+                </React.Suspense>
+              </ErrorBoundary>
+            </CitizenProtectedRoute>
+          }
+        />
         <Route path="/citizen" element={<Navigate to="/citizen/dashboard" replace />} />
 
         {/* --- Admin Routes --- */}
@@ -78,6 +107,13 @@ function App() {
               <AdminDashboard />
             </ErrorBoundary>
           } />
+          <Route path="alerts" element={
+            <ErrorBoundary>
+              <React.Suspense fallback={<div>Loading Alerts...</div>}>
+                <AlertsPage />
+              </React.Suspense>
+            </ErrorBoundary>
+          } />
           <Route path="complaints" element={
             <ErrorBoundary>
               <React.Suspense fallback={<div>Loading Complaints...</div>}>
@@ -89,6 +125,13 @@ function App() {
             <ErrorBoundary>
               <React.Suspense fallback={<div>Loading Audits...</div>}>
                 <AuditsPage />
+              </React.Suspense>
+            </ErrorBoundary>
+          } />
+          <Route path="governance/inspections" element={
+            <ErrorBoundary>
+              <React.Suspense fallback={<div>Loading Inspections...</div>}>
+                <InspectionsPage />
               </React.Suspense>
             </ErrorBoundary>
           } />
@@ -155,9 +198,16 @@ function App() {
               </React.Suspense>
             </ErrorBoundary>
           } />
+          <Route path="system/config" element={
+            <ErrorBoundary>
+              <React.Suspense fallback={<div>Loading Settings...</div>}>
+                <SettingsPage />
+              </React.Suspense>
+            </ErrorBoundary>
+          } />
         </Route>
         {/* Root redirect to login for now */}
-        <Route path="/" element={<Navigate to="/dealer/login" replace />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
       </Routes>
     </>
   );

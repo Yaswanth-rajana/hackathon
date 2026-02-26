@@ -39,7 +39,7 @@ export default function ComplaintPanel({ complaints, setComplaints }) {
                     <MessageSquare className="w-4 h-4" /> RECENT COMPLAINTS
                 </h2>
                 <span className="bg-[#B91C1C] text-white text-xs font-bold px-2 py-0.5 rounded-sm">
-                    {complaints?.filter(c => c.status === 'open' || c.status === 'pending').length || 0} Open
+                    {complaints?.filter(c => ['open', 'pending', 'new'].includes((c.status || '').toLowerCase())).length || 0} Open
                 </span>
             </div>
 
@@ -62,11 +62,11 @@ export default function ComplaintPanel({ complaints, setComplaints }) {
                         <tbody className="divide-y divide-gray-100">
                             {complaints.map((c) => (
                                 <tr key={c.id || Math.random()} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-4 py-3 text-gray-500 text-xs font-mono">{(c.id || '').substring(0, 8)}</td>
+                                    <td className="px-4 py-3 text-gray-500 text-xs font-mono">{(c.id || '').substring(0, 12)}</td>
                                     <td className="px-4 py-3 text-gray-900 font-medium">
                                         <div className="flex items-center gap-1.5">
-                                            {c.type === 'stock_diverted' && <AlertCircle className="w-3.5 h-3.5 text-[#B91C1C]" />}
-                                            {(c.type || 'Unknown').replace(/_/g, ' ')}
+                                            {(c.complaint_type === 'stock_diverted' || c.type === 'stock_diverted') && <AlertCircle className="w-3.5 h-3.5 text-[#B91C1C]" />}
+                                            {(c.complaint_type || c.type || 'Unknown').replace(/_/g, ' ')}
                                         </div>
                                     </td>
                                     <td className="px-4 py-3">

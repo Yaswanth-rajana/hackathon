@@ -9,13 +9,22 @@ export default function ComplaintsPage() {
     // Filters
     const [filterStatus, setFilterStatus] = useState('');
     const [filterMandal, setFilterMandal] = useState('');
+    const [filterDistrict, setFilterDistrict] = useState('');
     const [filterFrom, setFilterFrom] = useState('');
     const [filterTo, setFilterTo] = useState('');
 
     const fetchComplaints = async () => {
         try {
             setLoading(true);
-            const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/admin/complaints?limit=100`, {
+            const url = new URL(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/admin/complaints`);
+            url.searchParams.set('limit', '100');
+            if (filterDistrict) url.searchParams.set('district', filterDistrict);
+            if (filterStatus) url.searchParams.set('status', filterStatus);
+            if (filterFrom) url.searchParams.set('from_date', filterFrom);
+            if (filterTo) url.searchParams.set('to_date', filterTo);
+            if (filterMandal) url.searchParams.set('mandal', filterMandal);
+
+            const res = await fetch(url, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
@@ -29,7 +38,7 @@ export default function ComplaintsPage() {
         }
     };
 
-    useEffect(() => { fetchComplaints(); }, []);
+    useEffect(() => { fetchComplaints(); }, [filterDistrict, filterStatus, filterFrom, filterTo, filterMandal]);
 
     const [processingIds, setProcessingIds] = useState(new Set());
 
@@ -106,6 +115,35 @@ export default function ComplaintsPage() {
 
             {/* Filters */}
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.25rem', padding: '0.875rem', backgroundColor: '#f9fafb', borderRadius: '0.5rem', border: '1px solid #e5e7eb' }}>
+                <select value={filterDistrict} onChange={e => setFilterDistrict(e.target.value)} style={inputStyle}>
+                    <option value="">All Districts</option>
+                    <option value="Alluri Sitharama Raju">Alluri Sitharama Raju</option>
+                    <option value="Anakapalli">Anakapalli</option>
+                    <option value="Anantapur">Anantapur</option>
+                    <option value="Annamayya">Annamayya</option>
+                    <option value="Bapatla">Bapatla</option>
+                    <option value="Chittoor">Chittoor</option>
+                    <option value="East Godavari">East Godavari</option>
+                    <option value="Eluru">Eluru</option>
+                    <option value="Guntur">Guntur</option>
+                    <option value="Kakinada">Kakinada</option>
+                    <option value="Konaseema">Konaseema</option>
+                    <option value="Krishna">Krishna</option>
+                    <option value="Kurnool">Kurnool</option>
+                    <option value="Nandyal">Nandyal</option>
+                    <option value="NTR">NTR</option>
+                    <option value="Palnadu">Palnadu</option>
+                    <option value="Parvathipuram Manyam">Parvathipuram Manyam</option>
+                    <option value="Prakasam">Prakasam</option>
+                    <option value="Sri Potti Sriramulu Nellore">Sri Potti Sriramulu Nellore</option>
+                    <option value="Sri Sathya Sai">Sri Sathya Sai</option>
+                    <option value="Srikakulam">Srikakulam</option>
+                    <option value="Tirupati">Tirupati</option>
+                    <option value="Visakhapatnam">Visakhapatnam</option>
+                    <option value="Vizianagaram">Vizianagaram</option>
+                    <option value="West Godavari">West Godavari</option>
+                    <option value="YSR Kadapa">YSR Kadapa</option>
+                </select>
                 <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={inputStyle}>
                     <option value="">All Statuses</option>
                     <option value="pending">Pending</option>
@@ -120,8 +158,8 @@ export default function ComplaintsPage() {
                     <span>To:</span>
                     <input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} style={inputStyle} />
                 </div>
-                {(filterStatus || filterMandal || filterFrom || filterTo) && (
-                    <button onClick={() => { setFilterStatus(''); setFilterMandal(''); setFilterFrom(''); setFilterTo(''); }}
+                {(filterStatus || filterMandal || filterDistrict || filterFrom || filterTo) && (
+                    <button onClick={() => { setFilterStatus(''); setFilterMandal(''); setFilterDistrict(''); setFilterFrom(''); setFilterTo(''); }}
                         style={{ ...inputStyle, backgroundColor: '#fff', cursor: 'pointer', color: '#6b7280' }}>✕ Clear</button>
                 )}
             </div>

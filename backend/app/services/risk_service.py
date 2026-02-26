@@ -22,6 +22,8 @@ from app.services.analytics_aggregator import AnalyticsAggregator
 from app.models.risk_score import RiskScore
 from app.services.ml.risk_engine import evaluate_shop
 from app.models.shop import Shop
+from app.services.alert_service import AlertService
+from app.models.alert import AlertSeverity
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +199,21 @@ def run_ai_audit(db: Session, shop_id: str) -> dict:
                 })
                 db.commit()
 
+                # Add Governance Alert
+                shop = db.query(Shop).filter(Shop.id == shop_id).first()
+                if shop:
+                    AlertService.create_alert(
+                        db=db,
+                        severity=AlertSeverity[result["risk_level"]],
+                        alert_type="ML_FRAUD",
+                        district=shop.district,
+                        entity_id=shop_id,
+                        description=f"AI Audit flagged shop with risk level {result['risk_level']}",
+                        detected_by="ML",
+                        block_index=block.index,
+                        anomaly_id=anomaly.id if 'anomaly' in locals() else None
+                    )
+
             # 🔥 Broadcast WebSocket ML_ALERT event
             from app.services.event_emitter import manager
             import asyncio
@@ -294,6 +311,27 @@ def _insert_anomaly(
         db.add(anomaly)
         db.flush() # Secure native DB assignment safely
         
+        # 2. Add Governance Alert
+        shop = db.query(Shop).filter(Shop.id == shop_id).first()
+        if shop:
+            # Map rule severity (high/medium/low) to AlertSeverity
+            sev_map = {
+                "high": AlertSeverity.HIGH,
+                "medium": AlertSeverity.MEDIUM,
+                "low": AlertSeverity.INFO # Or skip if low, AlertService handles it
+            }
+            AlertService.create_alert(
+                db=db,
+                severity=sev_map.get(severity, AlertSeverity.INFO),
+                alert_type=f"RULE_{anomaly_type.upper()}",
+                district=shop.district,
+                entity_id=shop_id,
+                description=description,
+                detected_by="System",
+                block_index=block.index,
+                anomaly_id=anomaly.id
+            )
+
         blockchain.commit_block(block) # Stage 2: Finalize upon DB success bounds globally
         
     except Exception as e:

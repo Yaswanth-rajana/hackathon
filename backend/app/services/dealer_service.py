@@ -51,6 +51,14 @@ def link_mobile(db: Session, ration_card: str, mobile: str, current_user: User) 
     beneficiary = _get_beneficiary_or_404(db, ration_card)
     _enforce_ownership(beneficiary, current_user)
 
+    # Guard: Prevent linking if beneficiary is suspended/blocked
+    # We allow "inactive" because linking mobile is the first step of activation.
+    if beneficiary.account_status == "suspended":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot link mobile for suspended beneficiary"
+        )
+
     beneficiary.mobile = mobile
     beneficiary.mobile_verified = True
     db.commit()

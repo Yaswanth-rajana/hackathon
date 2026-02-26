@@ -144,11 +144,10 @@ class Blockchain:
                     is_valid=True
                 )
                 db.add(db_block)
-                db.commit()
+                db.flush() # Ensure it's prepared for commit
                 self.pending_transactions = []
                 logger.info(f"[BLOCK_COMMIT] index={block.index} hash={block.hash[:10]}...")
             except Exception as e:
-                db.rollback()
                 logger.error(f"Failed to commit block {block.index}: {e}")
                 raise ValueError(f"Blockchain storage failure: {str(e)}")
 

@@ -169,7 +169,7 @@ const AdminOverviewPanel = forwardRef(({ showHeader = true, title = "Admin Overv
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-1 min-h-[400px]">
                         <LiveAlerts
-                            alerts={alerts.data}
+                            alerts={alerts?.data || []}
                             loading={alerts.loading}
                             error={alerts.error}
                             onDismiss={handleDismissAlert}
@@ -194,7 +194,7 @@ const AdminOverviewPanel = forwardRef(({ showHeader = true, title = "Admin Overv
                     <div className="min-h-[400px]">
                         <div className={flashShop ? 'ring-4 ring-red-500 ring-opacity-50 rounded-xl animate-pulse' : ''}>
                             <HighRiskShopsTable
-                                shops={shops.data}
+                                shops={shops?.data || []}
                                 loading={shops.loading}
                                 error={shops.error}
                                 onExport={executeExport}

@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -15,3 +16,5 @@ class Audit(Base):
     status = Column(String, default="scheduled") # scheduled, completed, cancelled
     notes = Column(String, nullable=True)
     findings = Column(String, nullable=True)
+
+    shop = relationship("Shop")

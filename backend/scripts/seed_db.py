@@ -7,6 +7,7 @@ sys.path.append(os.path.join(os.getcwd(), 'backend'))
 from app.database import SessionLocal, engine, Base
 from app.models.user import User, UserRole
 from app.models.beneficiary import Beneficiary
+from app.models.shop import Shop
 from app.models.complaint import Complaint
 from app.core.security import get_password_hash
 
@@ -17,12 +18,60 @@ def seed():
 
     db = SessionLocal()
 
+    # ── Shops ──
+    shop1 = db.query(Shop).filter(Shop.id == "SHOP_001").first()
+    if not shop1:
+        shop1 = Shop(
+            id="SHOP_001",
+            name="Visakha Prime FPS",
+            district="Visakhapatnam",
+            address="MVP Colony, Sector 4",
+            stock_wheat=1200,
+            stock_rice=4500,
+            stock_sugar=300,
+            timings="08:00 AM - 08:00 PM"
+        )
+        db.add(shop1)
+        print("✅ Created SHOP_001")
+    
+    shop2 = db.query(Shop).filter(Shop.id == "SHOP_002").first()
+    if not shop2:
+        shop2 = Shop(
+            id="SHOP_002",
+            name="Vizag Central Rations",
+            district="Visakhapatnam",
+            address="Old Town Market",
+            stock_wheat=800,
+            stock_rice=3200,
+            stock_sugar=150,
+            timings="09:00 AM - 06:00 PM"
+        )
+        db.add(shop2)
+        print("✅ Created SHOP_002")
+
+    shop3 = db.query(Shop).filter(Shop.id == "TPt123").first()
+    if not shop3:
+        shop3 = Shop(
+            id="TPt123",
+            name="Emergency Response Hub",
+            district="Visakhapatnam",
+            address="District Collectorate Campus",
+            stock_wheat=500,
+            stock_rice=2000,
+            stock_sugar=100,
+            timings="24/7"
+        )
+        db.add(shop3)
+        print("✅ Created TPt123")
+    db.commit()
+
     # ── Dealer 1: SHOP_001 ──
     dealer1 = db.query(User).filter(User.id == "dealer_1").first()
     if dealer1:
         dealer1.shop_id = "SHOP_001"
-        db.commit()
-        print("✅ Updated dealer_1 with shop_id=SHOP_001")
+        dealer1.password_hash = get_password_hash("password")
+        dealer1.is_active = True
+        print("✅ Updated dealer_1")
     else:
         dealer1 = User(
             id="dealer_1",
@@ -30,14 +79,14 @@ def seed():
             mobile="9876543210",
             email="ramulu@example.com",
             role=UserRole.dealer,
-            district="Hyderabad",
+            district="Visakhapatnam",
             shop_id="SHOP_001",
             password_hash=get_password_hash("password"),
             is_active=True,
         )
         db.add(dealer1)
-        db.commit()
         print("✅ Created dealer_1 (SHOP_001)")
+    db.commit()
 
     # ── Dealer 2: SHOP_002 (for cross-shop 403 testing) ──
     dealer2 = db.query(User).filter(User.id == "dealer_2").first()
@@ -48,7 +97,7 @@ def seed():
             mobile="9876543211",
             email="suresh@example.com",
             role=UserRole.dealer,
-            district="Hyderabad",
+            district="Visakhapatnam",
             shop_id="SHOP_002",
             password_hash=get_password_hash("password"),
             is_active=True,
@@ -66,13 +115,23 @@ def seed():
             ration_card="RC_001",
             name="Lakshmi",
             family_members=4,
-            shop_id="SHOP_001",
+            shop_id="TPt123",
+            district="Visakhapatnam",
+            password_hash=get_password_hash("123456"),
+            account_status="active",
+            mobile_verified=True,
+            is_active=True
         )
         db.add(ben1)
-        db.commit()
         print("✅ Created beneficiary RC_001 (SHOP_001)")
     else:
-        print("✅ Beneficiary RC_001 already exists")
+        ben1.password_hash = get_password_hash("123456")
+        ben1.district = "Visakhapatnam"
+        ben1.account_status = "active"
+        ben1.mobile_verified = True
+        ben1.is_active = True
+        print("✅ Updated existing beneficiary RC_001 with status and verification")
+    db.commit()
 
     # ── Beneficiary 2: belongs to SHOP_002 (for 403 testing) ──
     ben2 = db.query(Beneficiary).filter(Beneficiary.ration_card == "RC_002").first()
@@ -82,12 +141,22 @@ def seed():
             name="Ravi",
             family_members=3,
             shop_id="SHOP_002",
+            district="Visakhapatnam",
+            password_hash=get_password_hash("123456"),
+            account_status="active",
+            mobile_verified=True,
+            is_active=True
         )
         db.add(ben2)
-        db.commit()
         print("✅ Created beneficiary RC_002 (SHOP_002)")
     else:
-        print("✅ Beneficiary RC_002 already exists")
+        ben2.password_hash = get_password_hash("123456")
+        ben2.district = "Visakhapatnam"
+        ben2.account_status = "active"
+        ben2.mobile_verified = True
+        ben2.is_active = True
+        print("✅ Updated existing beneficiary RC_002 with status and verification")
+    db.commit()
 
     # ── Complaints ──
     comp1 = db.query(Complaint).filter(Complaint.id == "CMP_001").first()
@@ -99,6 +168,9 @@ def seed():
             shop_id="SHOP_001",
             complaint_type="underweight",
             description="Dealer gave 2kg less rice.",
+            severity="minor",
+            is_anonymous=False,
+            district="Visakhapatnam",
             status="NEW"
         )
         db.add(comp1)
@@ -110,8 +182,11 @@ def seed():
             citizen_name="Anita",
             ration_card="RC_888",
             shop_id="SHOP_002",
-            complaint_type="rude behavior",
+            complaint_type="behavior",
             description="Dealer was shouting.",
+            severity="major",
+            is_anonymous=True,
+            district="Visakhapatnam",
             status="INVESTIGATING",
             inspector_id="Inspector Kumar",
             notes=[{"id": "note_1", "note": "Visited shop on Tuesday.", "timestamp": "2023-10-01T10:00:00Z"}]

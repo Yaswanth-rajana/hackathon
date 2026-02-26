@@ -19,7 +19,8 @@ class Transaction(Base):
     # --- New Dealer Module Columns ---
     otp_verified = Column(Boolean, default=False)
     cash_collected = Column(Float, default=0)
-    payment_mode = Column(String(50), nullable=True)  # free / cash / upi
+    payment_mode = Column(String(50), nullable=True)  # free / subsidized / cash_compensation
+    notes = Column(String, nullable=True)
     
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     block_hash = Column(String, nullable=False, index=True)
@@ -27,5 +28,6 @@ class Transaction(Base):
 
     __table_args__ = (
         CheckConstraint("cash_collected >= 0", name="check_cash_positive"),
-        CheckConstraint("payment_mode IN ('free', 'cash', 'upi')", name="check_payment_mode"),
+        CheckConstraint("payment_mode IN ('free', 'subsidized', 'cash_compensation')", name="check_payment_mode"),
+        CheckConstraint("transaction_type IN ('DISTRIBUTION', 'ALLOCATION', 'COMPLAINT', 'CASH_TRANSFER')", name="check_transaction_type"),
     )

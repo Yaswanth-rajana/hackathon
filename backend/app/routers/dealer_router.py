@@ -24,12 +24,13 @@ from app.schemas.dealer_schema import (
     StockResponse,
     ComplaintResponse,
     ResolveComplaintRequest,
-    PerformanceResponse
+    PerformanceResponse,
+    AuditTraceResponse
 )
 
 from app.services.dealer_service import lookup_beneficiary, link_mobile, set_pin
 from app.services.dealer_dashboard_service import get_dashboard
-from app.services.dealer_entitlement_service import get_current_entitlement, get_already_received
+from app.services.dealer_entitlement_service import get_current_entitlement, get_already_received, get_beneficiary_history
 from app.services.dealer_distribution_service import distribute_ration
 from app.services.dealer_analytics_service import get_weekly_performance
 
@@ -59,15 +60,16 @@ def get_beneficiary(
     return lookup_beneficiary(db, ration_card, current_user)
 
 
-@router.post("/link-mobile", response_model=MessageResponse)
-def post_link_mobile(
+@router.patch("/beneficiary/{ration_card}/link-mobile", response_model=MessageResponse)
+def patch_link_mobile(
+    ration_card: str,
     payload: LinkMobileRequest,
     current_user: User = Depends(require_role(UserRole.dealer)),
     db: Session = Depends(get_db),
 ):
     """Link mobile number to a beneficiary and mark as verified."""
-    link_mobile(db, payload.ration_card, payload.mobile, current_user)
-    return MessageResponse(message="Mobile linked successfully", ration_card=payload.ration_card)
+    link_mobile(db, ration_card, payload.mobile, current_user)
+    return MessageResponse(message="Mobile linked successfully", ration_card=ration_card)
 
 
 @router.post("/set-pin", response_model=MessageResponse)
@@ -129,7 +131,12 @@ def get_stock(
     """Fetch shop's current available stock."""
     shop = db.query(Shop).filter(Shop.id == current_user.shop_id).first()
     if not shop:
-        raise HTTPException(status_code=404, detail="Shop not found")
+        return {
+            "wheat": 0.0,
+            "rice": 0.0,
+            "sugar": 0.0,
+            "kerosene": 0.0
+        }
         
     return {
         "wheat": shop.stock_wheat,
@@ -180,3 +187,18 @@ def get_performance(
 ):
     """Get dealer's weekly performance and mandal average comparison."""
     return get_weekly_performance(db, current_user)
+
+
+@router.get("/history/{ration_card}", response_model=AuditTraceResponse)
+def get_history(
+    ration_card: str,
+    current_user: User = Depends(require_role(UserRole.dealer)),
+    db: Session = Depends(get_db)
+):
+    """Fetch beneficiary's transaction history."""
+    # Enforce shop ownership check (security)
+    from app.services.dealer_service import lookup_beneficiary
+    lookup_beneficiary(db, ration_card, current_user)
+    
+    history = get_beneficiary_history(db, ration_card)
+    return {"history": history}

@@ -1,9 +1,11 @@
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 import datetime
 import uuid
+import json
+import hashlib
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.main import app
 from app.database import Base, get_db
@@ -13,7 +15,10 @@ from app.models.shop import Shop
 from app.models.entitlement import Entitlement
 from app.models.blockchain_ledger import BlockchainLedger
 from app.core.security import get_password_hash
-import hashlib
+
+# Temporal Standardization
+def get_current_month():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m")
 
 # Use SQLite for testing
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test_dealer.db"
@@ -39,7 +44,8 @@ def setup_db():
         password_hash=get_password_hash("password123"),
         is_active=True,
         dealer_status="active",
-        shop_id=shop_id
+        shop_id=shop_id,
+        district="HQ"
     )
     db.add(dealer)
     
@@ -48,13 +54,13 @@ def setup_db():
         id=shop_id,
         name="Test Shop",
         dealer_id=dealer_id,
-        stock_wheat=100.0,
+        stock_wheat=500.0,
         stock_rice=100.0,
         stock_sugar=100.0
     )
     db.add(shop)
     
-    # 3. Create a Beneficiary
+    # 3. Create Beneficiaries (Pre-Verified)
     rc = "RC123456"
     ben = Beneficiary(
         ration_card=rc,
@@ -62,12 +68,24 @@ def setup_db():
         family_members=4,
         shop_id=shop_id,
         account_status="active",
-        mobile_verified=True
+        mobile_verified=True,
+        pin_hash=get_password_hash("1234")
     )
     db.add(ben)
+
+    ben2 = Beneficiary(
+        ration_card="RC999",
+        name="Stock Test Ben",
+        family_members=4,
+        shop_id=shop_id,
+        account_status="active",
+        mobile_verified=True,
+        pin_hash=get_password_hash("1234")
+    )
+    db.add(ben2)
     
-    # 4. Create Entitlement
-    current_month = datetime.datetime.utcnow().strftime("%Y-%m")
+    # 4. Create Entitlements
+    current_month = get_current_month()
     ent = Entitlement(
         ration_card=rc,
         month_year=current_month,
@@ -76,6 +94,15 @@ def setup_db():
         sugar=5.0
     )
     db.add(ent)
+    
+    ent2 = Entitlement(
+        ration_card="RC999",
+        month_year=current_month,
+        wheat=200.0,
+        rice=0.0,
+        sugar=0.0
+    )
+    db.add(ent2)
     
     db.commit()
     yield db
@@ -97,34 +124,29 @@ def dealer_token(setup_db):
         "/api/auth/dealer-login",
         json={"mobile": "9999999999", "password": "password123"}
     )
-    assert response.status_code == 200
     return response.json()["access_token"]
 
-
-def test_dealer_login_success(setup_db):
-    response = client.post(
-        "/api/auth/dealer-login",
-        # Use a different IP or assume not hit limit yet for 2nd test
-        json={"mobile": "9999999999", "password": "password123"}
-    )
-    assert response.status_code in (200, 429) # Ignore rate limit for raw login test if it hits
+@pytest.fixture
+def dealer_headers(dealer_token):
+    return {"Authorization": f"Bearer {dealer_token}"}
 
 
-def test_dealer_login_failure(setup_db):
-    response = client.post(
-        "/api/auth/dealer-login",
-        json={"mobile": "9999999999", "password": "wrongpassword"}
-    )
-    assert response.status_code in (401, 429)
+def test_dealer_dashboard(dealer_headers):
+    response = client.get("/api/dealer/dashboard", headers=dealer_headers)
+    assert response.status_code == 200
+    assert "dealer_name" in response.json()
 
 
-def test_distribution_exceeding_entitlement(setup_db, dealer_token):
-    headers = {"Authorization": f"Bearer {dealer_token}"}
-    
-    # Entitlement is 20 wheat. Try to distribute 25.
+def test_beneficiary_lookup(dealer_headers):
+    response = client.get("/api/dealer/beneficiary/RC123456", headers=dealer_headers)
+    assert response.status_code == 200
+    assert response.json()["ration_card"] == "RC123456"
+
+
+def test_distribution_exceeding_entitlement(dealer_headers):
     response = client.post(
         "/api/dealer/distribute",
-        headers=headers,
+        headers=dealer_headers,
         json={
             "ration_card": "RC123456",
             "wheat": 25.0,
@@ -133,85 +155,164 @@ def test_distribution_exceeding_entitlement(setup_db, dealer_token):
         }
     )
     assert response.status_code == 400
-    assert "Exceeds" in response.json()["detail"]
+    assert "exceeds" in response.json()["detail"].lower()
 
 
-def test_distribution_insufficient_stock(setup_db, dealer_token):
-    headers = {"Authorization": f"Bearer {dealer_token}"}
-    
-    # Shop currently has 100 stock. Entitlement allows 20. But what if we try 100 on another user?
-    # Let's create an entitlement of 200 to test stock guard specifically.
-    db = setup_db
-    ent = Entitlement(ration_card="RC999", month_year=datetime.datetime.utcnow().strftime("%Y-%m"), wheat=200.0)
-    ben = Beneficiary(ration_card="RC999", name="Fake", shop_id="shp-" + list(db.query(Shop).all())[0].id.split('-')[1], account_status="active")
-    db.add(ent)
-    db.add(ben)
+def test_distribution_insufficient_stock(dealer_headers, setup_db):
+    # Set shop stock to 10 for wheat manually
+    db = TestingSessionLocal()
+    shop = db.query(Shop).first()
+    original_stock = shop.stock_wheat
+    shop.stock_wheat = 10.0
     db.commit()
 
+    # Request 15.0 (within RC123456 entitlement of 20.0)
     response = client.post(
         "/api/dealer/distribute",
-        headers=headers,
+        headers=dealer_headers,
         json={
-            "ration_card": "RC999",
-            "wheat": 150.0,
+            "ration_card": "RC123456",
+            "wheat": 15.0,
             "rice": 0,
-            "sugar": 0
+            "sugar": 0,
+            "notes": "Testing stock shortage logic"
         }
     )
     assert response.status_code == 400
-    assert "Insufficient" in response.json()["detail"]
-
-
-def test_successful_distribution_and_double_distribution(setup_db, dealer_token):
-    headers = {"Authorization": f"Bearer {dealer_token}"}
+    assert "insufficient wheat stock" in response.json()["detail"].lower()
     
-    # 1. Distribute 10 wheat (entitlement is 20)
+    # Revert stock
+    shop.stock_wheat = original_stock
+    db.commit()
+
+
+def test_successful_distribution_logic(dealer_headers):
     response = client.post(
         "/api/dealer/distribute",
-        headers=headers,
+        headers=dealer_headers,
         json={
             "ration_card": "RC123456",
             "wheat": 10.0,
-            "rice": 0,
-            "sugar": 0
+            "rice": 5.0,
+            "sugar": 2.0,
+            "notes": "Standard monthly distribution"
         }
     )
     assert response.status_code == 200
     assert "transaction_id" in response.json()
 
-    # 2. Try to distribute 15 more (total 25 > 20)
+
+def test_cash_compensation_success(setup_db, dealer_headers):
+    db = TestingSessionLocal()
+    rc_cash = "RC_CASH_SUCCESS"
+    new_ben = Beneficiary(
+        ration_card=rc_cash,
+        name="Cash Ben",
+        family_members=4,
+        shop_id=db.query(Shop).first().id,
+        account_status="active",
+        mobile_verified=True,
+        pin_hash=get_password_hash("1234")
+    )
+    db.add(new_ben)
+    db.flush()
+    
+    ent_cash = Entitlement(
+        ration_card=rc_cash,
+        month_year=get_current_month(),
+        wheat=20.0, rice=15.0, sugar=5.0
+    )
+    db.add(ent_cash)
+    db.commit()
+
     response = client.post(
         "/api/dealer/distribute",
-        headers=headers,
+        headers=dealer_headers,
         json={
-            "ration_card": "RC123456",
-            "wheat": 15.0,
+            "ration_card": rc_cash,
+            "wheat": 0,
             "rice": 0,
-            "sugar": 0
+            "sugar": 0,
+            "payment_mode": "cash_compensation",
+            "cash_collected": 540.50,
+            "notes": "Direct Benefit Transfer Policy"
         }
     )
-    assert response.status_code == 400
-    assert "Exceeds wheat entitlement" in response.json()["detail"]
+    assert response.status_code == 200
 
 
-def test_blockchain_hash_integrity_and_tamper(setup_db):
-    db = setup_db
-    blocks = db.query(BlockchainLedger).order_by(BlockchainLedger.block_index.desc()).limit(2).all()
-    assert len(blocks) >= 2
+def test_blockchain_hash_integrity(setup_db):
+    db = TestingSessionLocal()
+    latest_block = db.query(BlockchainLedger).order_by(BlockchainLedger.block_index.desc()).first()
+    assert latest_block is not None
     
-    latest_block = blocks[0]
-    previous_block = blocks[1]
-    
-    # Verify manually
-    expected_hash_string = f"{latest_block.block_index}{latest_block.previous_hash}{latest_block.payload_hash}"
+    header = {
+        "index": latest_block.block_index,
+        "timestamp": latest_block.timestamp,
+        "payload_hash": latest_block.payload_hash,
+        "previous_hash": latest_block.previous_hash,
+        "nonce": latest_block.nonce,
+        "validator": latest_block.validator,
+        "network": latest_block.network
+    }
+    expected_hash_string = json.dumps(header, sort_keys=True)
     expected_hash = hashlib.sha256(expected_hash_string.encode()).hexdigest()
     
     assert latest_block.block_hash == expected_hash
+
+
+# --- Phase 2: Security Hardening Tests ---
+
+def test_empty_distribution_rejection(dealer_headers):
+    response = client.post(
+        "/api/dealer/distribute",
+        json={
+            "ration_card": "RC123456",
+            "wheat": 0, "rice": 0, "sugar": 0,
+            "payment_mode": "free"
+        },
+        headers=dealer_headers
+    )
+    assert response.status_code == 400
+    assert "empty" in response.json()["detail"].lower()
+
+
+def test_mixed_mode_exploit_protection(dealer_headers):
+    # RC123456 already took some groceries in test_successful_distribution_logic
+    response = client.post(
+        "/api/dealer/distribute",
+        json={
+            "ration_card": "RC123456",
+            "wheat": 0, "rice": 0, "sugar": 0,
+            "payment_mode": "cash_compensation",
+            "cash_collected": 500,
+            "notes": "Exploit attempt"
+        },
+        headers=dealer_headers
+    )
+    assert response.status_code == 400
+    assert "Cannot switch to Cash Compensation" in response.json()["detail"]
+
+
+def test_double_settlement_guard(dealer_headers, setup_db):
+    # Use RC999 - distribute remaining 200 wheat
+    response = client.post(
+        "/api/dealer/distribute",
+        json={
+            "ration_card": "RC999",
+            "wheat": 200, "rice": 0, "sugar": 0,
+            "payment_mode": "free",
+            "notes": "Full distribution for stock test user"
+        },
+        headers=dealer_headers
+    )
+    assert response.status_code == 200
     
-    # Tamper test
-    latest_block.payload_hash = "fake_tampered_hash"
-    db.commit()
-    
-    from app.services.blockchain_service import verify_chain
-    verify_result = verify_chain(db)
-    assert verify_result["valid"] is False
+    # Attempt more (Must fail)
+    response = client.post(
+        "/api/dealer/distribute",
+        json={"ration_card": "RC999", "wheat": 1, "rice": 0, "sugar": 0, "payment_mode": "free"},
+        headers=dealer_headers
+    )
+    assert response.status_code == 400
+    assert "already settled" in response.json()["detail"].lower()

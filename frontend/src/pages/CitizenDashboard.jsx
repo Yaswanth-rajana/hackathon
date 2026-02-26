@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCitizenAuth } from '../context/CitizenAuthContext';
-import { Home, History, MessageSquareWarning, User as UserIcon, LogOut, ShieldCheck, ChevronRight, Clock } from 'lucide-react';
+import { Home, History, MessageSquareWarning, User as UserIcon, LogOut, ShieldCheck, ChevronRight, Clock, X, Lock, Link, Eye } from 'lucide-react';
 import { citizenActions } from '../services/citizenApi';
 import { useAlert } from '../context/AlertContext';
 
@@ -16,12 +17,14 @@ import NearbyShopsPanel from '../components/citizen/NearbyShopsPanel';
 export default function CitizenDashboard() {
     const { citizen, logout } = useCitizenAuth();
     const { showAlert } = useAlert();
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('home'); // home, history, complaints, profile
 
     const [profile, setProfile] = useState(null);
     const [entitlement, setEntitlement] = useState(null);
     const [shop, setShop] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [showBlockchainModal, setShowBlockchainModal] = useState(false);
 
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -126,10 +129,13 @@ export default function CitizenDashboard() {
                             </div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100 text-[10px] font-black uppercase tracking-[0.2em] shadow-sm">
+                    <button
+                        onClick={() => setShowBlockchainModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100 text-[10px] font-black uppercase tracking-[0.2em] shadow-sm hover:bg-emerald-100 transition-all cursor-pointer"
+                    >
                         <ShieldCheck className="w-4 h-4" />
                         Blockchain Powered Ledger
-                    </div>
+                    </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
@@ -176,11 +182,17 @@ export default function CitizenDashboard() {
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-1 gap-4 pt-8 border-t md:border-t-0 md:pt-0">
-                                        <button className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-[#F0F9FF] hover:text-[#005A9C] rounded-2xl transition-all font-black text-xs uppercase tracking-widest text-gray-600 border border-transparent hover:border-blue-100">
+                                        <button
+                                            onClick={() => navigate('/citizen/update-mobile')}
+                                            className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-[#F0F9FF] hover:text-[#005A9C] rounded-2xl transition-all font-black text-xs uppercase tracking-widest text-gray-600 border border-transparent hover:border-blue-100"
+                                        >
                                             <span>Update Registered Mobile</span>
                                             <ChevronRight className="w-5 h-5 opacity-30" />
                                         </button>
-                                        <button className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-[#F0F9FF] hover:text-[#005A9C] rounded-2xl transition-all font-black text-xs uppercase tracking-widest text-gray-600 border border-transparent hover:border-blue-100">
+                                        <button
+                                            onClick={() => navigate('/citizen/update-pin')}
+                                            className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-[#F0F9FF] hover:text-[#005A9C] rounded-2xl transition-all font-black text-xs uppercase tracking-widest text-gray-600 border border-transparent hover:border-blue-100"
+                                        >
                                             <span>Update Portal PIN / Password</span>
                                             <ChevronRight className="w-5 h-5 opacity-30" />
                                         </button>
@@ -238,6 +250,94 @@ export default function CitizenDashboard() {
                     <span className={`text-[10px] uppercase font-black tracking-widest ${activeTab === 'profile' ? 'opacity-100' : 'opacity-40'}`}>Account</span>
                 </button>
             </nav>
+
+            {/* Blockchain Explanation Modal */}
+            {showBlockchainModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div
+                        className="absolute inset-0 bg-[#001A33]/80 backdrop-blur-md animate-in fade-in duration-300"
+                        onClick={() => setShowBlockchainModal(false)}
+                    />
+                    <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+                        <div className="bg-[#003366] p-8 text-white relative">
+                            <button
+                                onClick={() => setShowBlockchainModal(false)}
+                                className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                            <div className="flex items-center gap-4 mb-2">
+                                <div className="p-3 bg-emerald-400 rounded-2xl shadow-lg shadow-emerald-900/20">
+                                    <ShieldCheck className="w-6 h-6 text-[#003366]" />
+                                </div>
+                                <h3 className="text-2xl font-black tracking-tight">How it Works</h3>
+                            </div>
+                            <p className="text-emerald-300 text-xs font-black uppercase tracking-widest">Secure Immutability Layer</p>
+                        </div>
+
+                        <div className="p-8">
+                            <div className="space-y-6">
+                                <div className="flex gap-4">
+                                    <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center shrink-0">
+                                        <Hash className="w-5 h-5 text-blue-600" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-black text-gray-900 text-sm uppercase tracking-tight mb-1">Every distribution is hashed</h4>
+                                        <p className="text-sm text-gray-500 font-medium leading-relaxed">Each transaction generates a unique digital fingerprint (SHA-256), ensuring the data cannot be falsified.</p>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4">
+                                    <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center shrink-0">
+                                        <Link className="w-5 h-5 text-emerald-600" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-black text-gray-900 text-sm uppercase tracking-tight mb-1">Linked to previous block</h4>
+                                        <p className="text-sm text-gray-500 font-medium leading-relaxed">Transactions are chained chronologically. Altering one transaction would require altering every subsequent block.</p>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4">
+                                    <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center shrink-0">
+                                        <Lock className="w-5 h-5 text-amber-600" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-black text-gray-900 text-sm uppercase tracking-tight mb-1">Cannot be altered</h4>
+                                        <p className="text-sm text-gray-500 font-medium leading-relaxed">Once a distribution is verified on-chain, it is permanent. No officer, dealer, or citizen can retroactively modify it.</p>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4">
+                                    <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center shrink-0">
+                                        <Eye className="w-5 h-5 text-purple-600" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-black text-gray-900 text-sm uppercase tracking-tight mb-1">Publicly Auditable</h4>
+                                        <p className="text-sm text-gray-500 font-medium leading-relaxed">Transparency is absolute. Any citizen can verify the audit trail using their unique ration card ID.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-10 p-5 bg-gray-50 rounded-2xl border border-gray-100">
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Your Most Recent Transaction Hash</p>
+                                <div className="flex items-center gap-2">
+                                    <code className="text-[10px] font-bold text-[#003366] break-all bg-white p-2 rounded-lg border border-gray-100 flex-1">
+                                        {entitlement?.last_txn_hash || '0x4f2a8...91b2c'}
+                                    </code>
+                                    <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => setShowBlockchainModal(false)}
+                                className="w-full mt-8 py-4 bg-[#003366] hover:bg-[#002244] text-white rounded-2xl font-black uppercase tracking-[0.2em] text-xs transition-all shadow-xl shadow-blue-100"
+                            >
+                                Got it, thanks!
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

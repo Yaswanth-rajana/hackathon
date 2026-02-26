@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import Optional, Dict, Any
@@ -32,6 +32,7 @@ def list_complaints(
     request: Request,
     status: Optional[str] = None, 
     shop_id: Optional[str] = None, 
+    district: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     page: int = 1, 
@@ -39,7 +40,15 @@ def list_complaints(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(Complaint).join(Shop, Shop.id == Complaint.shop_id).filter(Shop.district == current_user.district)
+    query = db.query(Complaint)
+
+    # District Security & Filtering
+    # If user has a specific district (and it's not HQ), enforce it.
+    # Otherwise, allow the 'district' query parameter if provided.
+    if current_user.district and current_user.district != "HQ":
+        query = query.filter(Complaint.district == current_user.district)
+    elif district:
+        query = query.filter(Complaint.district == district)
 
     if status:
         query = query.filter(Complaint.status == status)
@@ -48,7 +57,9 @@ def list_complaints(
     if from_date:
         query = query.filter(Complaint.created_at >= datetime.fromisoformat(from_date))
     if to_date:
-        query = query.filter(Complaint.created_at <= datetime.fromisoformat(to_date))
+        # Include the entire day for the end date
+        end_date = datetime.fromisoformat(to_date).replace(hour=23, minute=59, second=59, microsecond=999999)
+        query = query.filter(Complaint.created_at <= end_date)
 
     total = query.count()
     complaints = query.order_by(Complaint.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
@@ -60,12 +71,8 @@ def list_complaints(
         "limit": limit
     }
 
-def _emit(district, event_type, complaint_id):
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(manager.emit_event(district, event_type, complaint_id, "complaint"))
-    except RuntimeError:
-        asyncio.run(manager.emit_event(district, event_type, complaint_id, "complaint"))
+def _emit(district, event_type, complaint_id, background_tasks: BackgroundTasks):
+    background_tasks.add_task(manager.emit_event, district, event_type, complaint_id, "complaint")
 
 @router.put("/{id}/assign")
 @audit_logger(action="ASSIGN_COMPLAINT", target_type="complaint")
@@ -73,10 +80,15 @@ def assign_complaint(
     id: str, 
     request_data: AssignInspectorRequest, 
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    complaint = db.query(Complaint).join(Shop, Shop.id == Complaint.shop_id).filter(Complaint.id == id, Shop.district == current_user.district).first()
+    query = db.query(Complaint).filter(Complaint.id == id)
+    if current_user.district and current_user.district != "HQ":
+        query = query.filter(Complaint.district == current_user.district)
+    
+    complaint = query.first()
     if not complaint:
         raise HTTPException(404, "Complaint not found or unauthorized")
         
@@ -100,7 +112,7 @@ def assign_complaint(
     db.commit()
     db.refresh(complaint)
     
-    _emit(current_user.district, "COMPLAINT_UPDATED", complaint.id)
+    _emit(complaint.district, "COMPLAINT_UPDATED", complaint.id, background_tasks)
     return complaint
 
 @router.put("/{id}/resolve")
@@ -109,10 +121,15 @@ def resolve_complaint(
     id: str, 
     request_data: ResolveComplaintRequest, 
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    complaint = db.query(Complaint).join(Shop, Shop.id == Complaint.shop_id).filter(Complaint.id == id, Shop.district == current_user.district).first()
+    query = db.query(Complaint).filter(Complaint.id == id)
+    if current_user.district and current_user.district != "HQ":
+        query = query.filter(Complaint.district == current_user.district)
+    
+    complaint = query.first()
     if not complaint:
         raise HTTPException(404, "Complaint not found")
         
@@ -127,9 +144,9 @@ def resolve_complaint(
     db.commit()
     db.refresh(complaint)
     
-    AnalyticsAggregator.record_complaint_resolution(db, current_user.district)
+    AnalyticsAggregator.record_complaint_resolution(db, complaint.district)
     
-    _emit(current_user.district, "COMPLAINT_UPDATED", complaint.id)
+    _emit(complaint.district, "COMPLAINT_UPDATED", complaint.id, background_tasks)
     return complaint
 
 @router.put("/{id}/escalate")
@@ -138,10 +155,15 @@ def escalate_complaint(
     id: str, 
     request_data: EscalateComplaintRequest, 
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    complaint = db.query(Complaint).join(Shop, Shop.id == Complaint.shop_id).filter(Complaint.id == id, Shop.district == current_user.district).first()
+    query = db.query(Complaint).filter(Complaint.id == id)
+    if current_user.district and current_user.district != "HQ":
+        query = query.filter(Complaint.district == current_user.district)
+    
+    complaint = query.first()
     if not complaint:
         raise HTTPException(404, "Complaint not found")
         
@@ -160,5 +182,5 @@ def escalate_complaint(
     db.commit()
     db.refresh(complaint)
     
-    _emit(current_user.district, "COMPLAINT_UPDATED", complaint.id)
+    _emit(complaint.district, "COMPLAINT_UPDATED", complaint.id, background_tasks)
     return complaint

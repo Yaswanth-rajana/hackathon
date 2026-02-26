@@ -24,12 +24,14 @@ def ensure_genesis_block(db: Session) -> None:
     if existing is not None:
         return  # Genesis already present
 
+    import datetime
     genesis = BlockchainLedger(
         block_index=0,
         block_hash=compute_sha256("GENESIS"),
         previous_hash="0",
         transaction_id=None,
         payload_hash=None,
+        timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
         is_valid=True,
     )
     db.add(genesis)
@@ -75,12 +77,14 @@ def create_block(
     block_hash_string = f"{block_index}{previous_hash}{payload_hash}"
     block_hash = compute_sha256(block_hash_string)
 
+    import datetime
     block = BlockchainLedger(
         block_index=block_index,
         block_hash=block_hash,
         previous_hash=previous_hash,
         transaction_id=transaction_id,
         payload_hash=payload_hash,
+        timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
         is_valid=True,
     )
     db.add(block)

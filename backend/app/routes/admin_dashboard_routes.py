@@ -29,8 +29,17 @@ def require_admin(current_user: User = Depends(get_current_user)):
     return current_user
 
 @router.get("/summary", response_model=DashboardSummaryResponse)
-def get_dashboard_summary(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    total_shops = db.query(Shop).filter(Shop.district == admin.district).count()
+def get_dashboard_summary(
+    district: Optional[str] = Query(None),
+    db: Session = Depends(get_db), 
+    admin: User = Depends(require_admin)
+):
+    target_district = district if (admin.district == "HQ" and district) else admin.district
+    
+    query = db.query(Shop)
+    if target_district and target_district != "HQ":
+        query = query.filter(Shop.district == target_district)
+    total_shops = query.count()
     
     # Get latest risk score per shop via subquery directly in SQL
     subq = db.query(
@@ -38,19 +47,28 @@ def get_dashboard_summary(db: Session = Depends(get_db), admin: User = Depends(r
         func.max(RiskScore.calculated_at).label('max_date')
     ).group_by(RiskScore.shop_id).subquery()
 
-    high_risk_shops = db.query(Shop.id).join(
+    risk_query = db.query(Shop.id).join(
         subq, Shop.id == subq.c.shop_id
     ).join(
         RiskScore, (RiskScore.shop_id == subq.c.shop_id) & (RiskScore.calculated_at == subq.c.max_date)
     ).filter(
-        Shop.district == admin.district,
         RiskScore.risk_score >= 70
-    ).count()
+    )
+    
+    if target_district and target_district != "HQ":
+        risk_query = risk_query.filter(Shop.district == target_district)
+        
+    high_risk_shops = risk_query.count()
     
     start_of_month = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    complaints = db.query(Complaint).join(Shop, Complaint.shop_id == Shop.id).filter(
-        Shop.district == admin.district, Complaint.created_at >= start_of_month
-    ).count()
+    complaint_query = db.query(Complaint).join(Shop, Complaint.shop_id == Shop.id).filter(
+        Complaint.created_at >= start_of_month
+    )
+    
+    if target_district and target_district != "HQ":
+        complaint_query = complaint_query.filter(Shop.district == target_district)
+        
+    complaints = complaint_query.count()
     
     compliance = max(0, int(100 - (high_risk_shops / total_shops * 100))) if total_shops > 0 else 100
     
@@ -61,11 +79,13 @@ def get_dashboard_summary(db: Session = Depends(get_db), admin: User = Depends(r
 
 @router.get("/alerts", response_model=AlertsPaginatedResponse)
 def get_alerts(
+    district: Optional[str] = Query(None),
     severity: Optional[str] = None, from_date: Optional[datetime] = None,
     to_date: Optional[datetime] = None, page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100), db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
+    target_district = district if (admin.district == "HQ" and district) else admin.district
     # Subquery for latest risk score
     subq = db.query(
         RiskScore.shop_id,
@@ -80,9 +100,10 @@ def get_alerts(
         Shop, Anomaly.shop_id == Shop.id
     ).outerjoin(
         latest_risk, Anomaly.shop_id == latest_risk.c.shop_id
-    ).filter(
-        Shop.district == admin.district, Anomaly.is_resolved == False
-    )
+    ).filter(Anomaly.is_resolved == False)
+    
+    if target_district and target_district != "HQ":
+        query = query.filter(Shop.district == target_district)
     
     if severity: query = query.filter(Anomaly.severity == severity)
     if from_date: query = query.filter(Anomaly.created_at >= from_date)
@@ -103,14 +124,23 @@ def get_alerts(
 
 @router.patch("/alerts/{id}/dismiss")
 def dismiss_alert(id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    anomaly = db.query(Anomaly).join(Shop).filter(Anomaly.id == id, Shop.district == admin.district).first()
+    query = db.query(Anomaly).join(Shop).filter(Anomaly.id == id)
+    if admin.district and admin.district != "HQ":
+        query = query.filter(Shop.district == admin.district)
+    
+    anomaly = query.first()
     if not anomaly: raise HTTPException(status_code=404, detail="Alert not found")
     anomaly.is_resolved = True
     db.commit()
     return {"message": "Alert dismissed"}
 
 @router.get("/heatmap", response_model=List[HeatmapRegionResponse])
-def get_heatmap(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def get_heatmap(
+    district: Optional[str] = Query(None),
+    db: Session = Depends(get_db), 
+    admin: User = Depends(require_admin)
+):
+    target_district = district if (admin.district == "HQ" and district) else admin.district
     subq = db.query(
         RiskScore.shop_id,
         func.max(RiskScore.calculated_at).label('max_date')
@@ -121,9 +151,14 @@ def get_heatmap(db: Session = Depends(get_db), admin: User = Depends(require_adm
     ).subquery()
 
     # Join shops with their latest risk score natively
-    shop_risks = db.query(Shop.mandal, latest_risk.c.risk_score, latest_risk.c.fraud_type).outerjoin(
+    query = db.query(Shop.mandal, latest_risk.c.risk_score, latest_risk.c.fraud_type).outerjoin(
         latest_risk, Shop.id == latest_risk.c.shop_id
-    ).filter(Shop.district == admin.district).all()
+    )
+    
+    if target_district and target_district != "HQ":
+        query = query.filter(Shop.district == target_district)
+        
+    shop_risks = query.all()
     
     mandal_stats = {}
     for mandal, r_score, f_type in shop_risks:
@@ -153,7 +188,14 @@ def get_heatmap(db: Session = Depends(get_db), admin: User = Depends(require_adm
     return res
 
 @router.get("/high-risk-shops", response_model=HighRiskShopsPaginatedResponse)
-def get_high_risk_shops(page: int = Query(1, ge=1), limit: int = Query(10, ge=1, le=100), db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def get_high_risk_shops(
+    district: Optional[str] = Query(None),
+    page: int = Query(1, ge=1), 
+    limit: int = Query(10, ge=1, le=100), 
+    db: Session = Depends(get_db), 
+    admin: User = Depends(require_admin)
+):
+    target_district = district if (admin.district == "HQ" and district) else admin.district
     # Latest Risk Subquery
     risk_subq = db.query( RiskScore.shop_id, func.max(RiskScore.calculated_at).label('max_date') ).group_by(RiskScore.shop_id).subquery()
     latest_risk = db.query(RiskScore).join( risk_subq, (RiskScore.shop_id == risk_subq.c.shop_id) & (RiskScore.calculated_at == risk_subq.c.max_date) ).subquery()
@@ -167,9 +209,11 @@ def get_high_risk_shops(page: int = Query(1, ge=1), limit: int = Query(10, ge=1,
     ).outerjoin(
         latest_audit, Shop.id == latest_audit.c.shop_id
     ).filter(
-        Shop.district == admin.district,
         latest_risk.c.risk_score >= 60
     )
+
+    if target_district and target_district != "HQ":
+        query = query.filter(Shop.district == target_district)
 
     items = query.order_by(desc(latest_risk.c.risk_score)).offset((page - 1) * limit).limit(limit).all()
 
@@ -186,7 +230,12 @@ def get_high_risk_shops(page: int = Query(1, ge=1), limit: int = Query(10, ge=1,
 from fastapi.responses import StreamingResponse
 
 @router.get("/high-risk-shops/export")
-def export_high_risk_shops(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def export_high_risk_shops(
+    district: Optional[str] = Query(None),
+    db: Session = Depends(get_db), 
+    admin: User = Depends(require_admin)
+):
+    target_district = district if (admin.district == "HQ" and district) else admin.district
     risk_subq = db.query( RiskScore.shop_id, func.max(RiskScore.calculated_at).label('max_date') ).group_by(RiskScore.shop_id).subquery()
     latest_risk = db.query(RiskScore).join( risk_subq, (RiskScore.shop_id == risk_subq.c.shop_id) & (RiskScore.calculated_at == risk_subq.c.max_date) ).subquery()
 
@@ -198,9 +247,13 @@ def export_high_risk_shops(db: Session = Depends(get_db), admin: User = Depends(
     ).outerjoin(
         latest_audit, Shop.id == latest_audit.c.shop_id
     ).filter(
-        Shop.district == admin.district,
         latest_risk.c.risk_score >= 60
-    ).order_by(desc(latest_risk.c.risk_score))
+    )
+    
+    if target_district and target_district != "HQ":
+        query = query.filter(Shop.district == target_district)
+        
+    query = query.order_by(desc(latest_risk.c.risk_score))
 
     def iter_csv():
         yield "Shop ID,Shop Name,Mandal,Risk Score,Fraud Type,Last Audit\n"
@@ -217,10 +270,18 @@ def export_high_risk_shops(db: Session = Depends(get_db), admin: User = Depends(
     )
 
 @router.get("/blockchain-recent", response_model=List[BlockchainRecentResponse])
-def get_blockchain_recent(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    txs = db.query(Transaction).join(Shop, Transaction.shop_id == Shop.id).filter(
-        Shop.district == admin.district
-    ).order_by(desc(Transaction.timestamp)).limit(10).all()
+def get_blockchain_recent(
+    district: Optional[str] = Query(None),
+    db: Session = Depends(get_db), 
+    admin: User = Depends(require_admin)
+):
+    target_district = district if (admin.district == "HQ" and district) else admin.district
+    
+    query = db.query(Transaction).join(Shop, Transaction.shop_id == Shop.id)
+    if target_district and target_district != "HQ":
+        query = query.filter(Shop.district == target_district)
+        
+    txs = query.order_by(desc(Transaction.timestamp)).limit(10).all()
     
     res = []
     for tx in txs:

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Store, MapPin, Clock, Star, ShieldAlert, ShieldCheck, TrendingUp } from 'lucide-react';
+import { Store, MapPin, Clock, Star, ShieldAlert, ShieldCheck, TrendingUp, AlertTriangle, MessageSquareWarning } from 'lucide-react';
 
 export default function ShopCard({ shop }) {
     if (!shop) {
@@ -81,6 +81,45 @@ export default function ShopCard({ shop }) {
                     </div>
                 </div>
             </div>
+
+            {/* Grievance & Risk Section */}
+            {(shop.shop_risk_level !== "NORMAL" || shop.active_grievances > 0) && (
+                <div className={`mt-6 p-4 border rounded-2xl relative z-10 transition-all ${shop.active_grievances >= 3 || shop.shop_risk_level === "HIGH"
+                        ? 'bg-rose-50 border-rose-100 animate-pulse-slow'
+                        : 'bg-amber-50 border-amber-100'
+                    }`}>
+                    <div className="flex items-start gap-3 mb-3">
+                        {shop.active_grievances >= 3 ? (
+                            <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                        ) : (
+                            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                        )}
+                        <div>
+                            <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${shop.active_grievances >= 3 ? 'text-rose-700' : 'text-amber-700'
+                                }`}>
+                                {shop.active_grievances >= 3 ? 'High Complaint Volume' : 'Governance Alert'}
+                            </p>
+                            <p className={`text-xs font-bold leading-tight ${shop.active_grievances >= 3 ? 'text-rose-900' : 'text-amber-900'
+                                }`}>
+                                {shop.shop_warning || `This shop has ${shop.active_grievances} active citizen grievances.`}
+                            </p>
+                        </div>
+                    </div>
+                    {shop.active_grievances > 0 && (
+                        <div className="flex items-center gap-2 mb-3 px-2 py-1 bg-white/50 rounded-lg border border-black/5">
+                            <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                            <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest">
+                                Investigation {shop.active_grievances >= 3 ? 'Escalated' : 'Queued'}
+                            </span>
+                        </div>
+                    )}
+                    <button className={`w-full py-2 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ${shop.active_grievances >= 3 ? 'bg-rose-600 hover:bg-rose-700' : 'bg-amber-600 hover:bg-amber-700'
+                        }`}>
+                        <MessageSquareWarning className="w-3.5 h-3.5" />
+                        File Supplemental Report
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

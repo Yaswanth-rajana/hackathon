@@ -7,4 +7,5 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 limiter = Limiter(
     key_func=get_remote_address,
     storage_uri=REDIS_URL,
+    enabled=os.getenv("TESTING", "0") != "1"
 )

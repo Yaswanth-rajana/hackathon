@@ -47,13 +47,14 @@ def list_dealers(
     limit: int = Query(20, ge=1, le=100),
     status: Optional[str] = Query(None),
     mandal: Optional[str] = Query(None),
+    district: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     admin_user: User = Depends(require_role(UserRole.admin)),
 ):
     """Paginated dealer list scoped to admin's district."""
     return dealer_admin_service.list_dealers(
-        db, admin_user, page, limit, status, mandal, search
+        db, admin_user, page, limit, status, mandal, district, search
     )
 
 

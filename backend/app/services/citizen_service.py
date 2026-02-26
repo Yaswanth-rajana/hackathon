@@ -3,7 +3,7 @@
 import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 import math
 
 from app.models.beneficiary import Beneficiary
@@ -14,6 +14,7 @@ from app.models.shop import Shop
 from app.models.complaint import Complaint
 from app.models.notification import Notification
 from app.models.family_member import FamilyMember
+from app.models.anomaly import Anomaly
 from app.schemas.citizen_schema import ComplaintCreateRequest, FamilyMemberCreateRequest
 from fastapi import HTTPException, status
 
@@ -71,29 +72,101 @@ def get_citizen_entitlement(db: Session, beneficiary: Beneficiary) -> dict:
     transactions = db.query(Transaction).filter(
         Transaction.ration_card == beneficiary.ration_card,
         Transaction.timestamp >= start_of_month
-    ).all()
+    ).order_by(Transaction.timestamp.desc()).all()
 
     wheat_received = 0.0
     rice_received = 0.0
     sugar_received = 0.0
+    cash_compensation = None
+    last_txn_hash = None
+    last_txn_block = None
+    short_distribution_reason = None
+    last_distribution_date = None
+    recent_activity = []
 
     for t in transactions:
-        if isinstance(t.items, dict):
-            wheat_received += t.items.get("wheat", 0.0)
-            rice_received += t.items.get("rice", 0.0)
-            sugar_received += t.items.get("sugar", 0.0)
+        if t.transaction_type == "CASH_TRANSFER" and not cash_compensation:
+            cash_compensation = {
+                "amount": t.cash_collected,
+                "date": t.timestamp,
+                "block": t.block_index,
+                "txn_hash": t.block_hash,
+                "verified": True
+            }
+        
+        if t.transaction_type == "DISTRIBUTION":
+            if isinstance(t.items, dict):
+                wheat_received += t.items.get("wheat", 0.0)
+                rice_received += t.items.get("rice", 0.0)
+                sugar_received += t.items.get("sugar", 0.0)
             
+            # Check for short distribution reason (from notes)
+            # In our system, short distribution distribution requires notes >= 5 chars
+            if t.notes and not short_distribution_reason:
+                short_distribution_reason = t.notes
+                last_distribution_date = t.timestamp
+
+        if not last_txn_hash:
+            last_txn_hash = t.block_hash
+            last_txn_block = t.block_index
+        
+        if len(recent_activity) < 3:
+            summary = ""
+            if t.transaction_type == "CASH_TRANSFER":
+                summary = f"Cash Compensation ₹{t.cash_collected}"
+            else:
+                items = []
+                if t.items.get("wheat"): items.append(f"Wheat {t.items['wheat']}kg")
+                if t.items.get("rice"): items.append(f"Rice {t.items['rice']}kg")
+                if t.items.get("sugar"): items.append(f"Sugar {t.items['sugar']}kg")
+                summary = ", ".join(items) if items else "Other Distribution"
+            
+            recent_activity.append({
+                "date": t.timestamp,
+                "type": t.transaction_type,
+                "summary": summary,
+                "block": t.block_index
+            })
+
     wheat_remaining = max(0.0, wheat_total - wheat_received)
     rice_remaining = max(0.0, rice_total - rice_received)
     sugar_remaining = max(0.0, sugar_total - sugar_received)
     
-    if wheat_remaining == 0 and rice_remaining == 0 and sugar_remaining == 0:
+    is_fully_distributed = (wheat_remaining <= 0 and rice_remaining <= 0 and sugar_remaining <= 0)
+    cash_transfer_exists = cash_compensation is not None
+    is_settled = cash_transfer_exists or is_fully_distributed
+
+    if is_fully_distributed:
         dist_status = "completed"
     elif wheat_received == 0 and rice_received == 0 and sugar_received == 0:
         dist_status = "pending"
     else:
         dist_status = "partial"
+    
+    # Shop Risk Logic
+    shop = db.query(Shop).filter(Shop.id == beneficiary.shop_id).first()
+    shop_risk_level = "NORMAL"
+    shop_warning = None
+    
+    if shop:
+        # 1. Count short distributions for this shop in last 30 days
+        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+        short_count = db.query(func.count(Transaction.id)).filter(
+            Transaction.shop_id == shop.id,
+            Transaction.transaction_type == "DISTRIBUTION",
+            Transaction.notes.isnot(None),
+            Transaction.timestamp >= thirty_days_ago
+        ).scalar()
         
+        if short_count >= 2:
+            shop_risk_level = "ELEVATED"
+            shop_warning = "This shop has recorded multiple short distributions. You may file a complaint."
+        
+        # 2. Check risk score (from AI) - Assuming threshold of 0.7 for HIGH
+        if shop.risk_score >= 0.7:
+            shop_risk_level = "HIGH"
+            shop_warning = "High risk detected for this shop. Government audit in progress."
+
     return {
         "month_year": current_month_year,
         "wheat_total": wheat_total,
@@ -102,7 +175,16 @@ def get_citizen_entitlement(db: Session, beneficiary: Beneficiary) -> dict:
         "rice_remaining": rice_remaining,
         "sugar_total": sugar_total,
         "sugar_remaining": sugar_remaining,
-        "status": dist_status
+        "status": dist_status,
+        "is_settled": is_settled,
+        "last_txn_hash": last_txn_hash,
+        "last_txn_block": last_txn_block,
+        "cash_compensation": cash_compensation,
+        "short_distribution_reason": short_distribution_reason,
+        "last_distribution_date": last_distribution_date,
+        "shop_risk_level": shop_risk_level,
+        "shop_warning": shop_warning,
+        "recent_activity": recent_activity
     }
 
 
@@ -113,49 +195,105 @@ def get_citizen_shop(db: Session, beneficiary: Beneficiary) -> dict:
         
     dealer = db.query(User).filter(User.id == shop.dealer_id).first()
     
+    # Shop Risk Logic (Consistent with entitlement)
+    shop_risk_level = "NORMAL"
+    shop_warning = None
+    
+    # 1. Count short distributions for this shop in last 30 days
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    short_count = db.query(func.count(Transaction.id)).filter(
+        Transaction.shop_id == shop.id,
+        Transaction.transaction_type == "DISTRIBUTION",
+        Transaction.notes.isnot(None),
+        Transaction.timestamp >= thirty_days_ago
+    ).scalar()
+    
+    if short_count >= 2:
+        shop_risk_level = "ELEVATED"
+        shop_warning = "This shop has recorded multiple short distributions. You may file a complaint."
+    
+    if shop.risk_score >= 0.7:
+        shop_risk_level = "HIGH"
+        shop_warning = "High risk detected for this shop. Government audit in progress."
+
+    # Grievance Count Logic
+    active_grievances = db.query(func.count(Complaint.id)).filter(
+        Complaint.shop_id == shop.id,
+        Complaint.status != "RESOLVED"
+    ).scalar()
+
+    if active_grievances >= 3:
+        shop_warning = f"High Complaint Volume: {active_grievances} active grievances pending."
+        if shop_risk_level == "NORMAL": shop_risk_level = "ELEVATED"
+    elif active_grievances > 0:
+        shop_warning = shop_warning or f"Active Grievances: {active_grievances} reported by citizens."
+
     return {
         "name": shop.name,
         "dealer_name": dealer.name if dealer else "N/A",
         "address": shop.address or "N/A",
         "timings": shop.timings or "09:00 AM - 05:00 PM",
         "rating": shop.rating or 4.5,
-        "risk_score": shop.risk_score or 0.0
+        "risk_score": shop.risk_score or 0.0,
+        "shop_risk_level": shop_risk_level,
+        "shop_warning": shop_warning,
+        "active_grievances": active_grievances
     }
 
 
 def file_complaint(db: Session, beneficiary: Beneficiary, request: ComplaintCreateRequest) -> dict:
-    # Rate Limiting: Max 3 complaints per day
+    # 1. Validation
+    description = request.description.strip() if request.description else ""
+    if len(description) < 10:
+        raise HTTPException(status_code=400, detail="Description must be at least 10 characters long.")
+
+    # 2. Refined Spam Prevention (Same category/shop/citizen within 5 mins)
+    five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
+    existing_spam = db.query(Complaint).filter(
+        Complaint.ration_card == beneficiary.ration_card,
+        Complaint.shop_id == (request.shop_id or beneficiary.shop_id),
+        Complaint.complaint_type == request.complaint_type,
+        Complaint.created_at >= five_minutes_ago
+    ).first()
+    
+    if existing_spam:
+        raise HTTPException(
+            status_code=429, 
+            detail="Duplicate complaint detected. Please wait 5 minutes before submitting the same issue again."
+        )
+
+    # 3. Rate Limiting (Daily)
     start_of_day = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     today_complaints = db.query(func.count(Complaint.id)).filter(
         Complaint.ration_card == beneficiary.ration_card,
         Complaint.created_at >= start_of_day
     ).scalar()
     
-    if today_complaints >= 3:
-        raise HTTPException(status_code=429, detail="Maximum of 3 complaints allowed per day.")
+    if today_complaints >= 5: # Increased to 5 for demo flexibility but keeping limit
+        raise HTTPException(status_code=429, detail="Maximum of 5 complaints allowed per day.")
 
-    # Stage 1: Blockchain Simulation Layer
     target_shop_id = request.shop_id or beneficiary.shop_id
-    
-    # Optional: Verify shop exists
-    shop_exists = db.query(Shop).filter(Shop.id == target_shop_id).first()
-    if not shop_exists:
-        raise HTTPException(status_code=404, detail=f"Shop {target_shop_id} not found in system")
+    shop = db.query(Shop).filter(Shop.id == target_shop_id).first()
+    if not shop:
+        raise HTTPException(status_code=404, detail=f"Shop {target_shop_id} not found")
 
+    # 4. District Auto-Assignment (Ignore UI input, force from profile)
+    assigned_district = beneficiary.district or "Hyderabad"
+
+    # 5. Blockchain Transaction
     blockchain_payload = {
         "type": "COMPLAINT",
         "shop_id": target_shop_id,
         "ration_card_masked": beneficiary.ration_card[:4] + "****" + beneficiary.ration_card[-4:],
         "complaint_type": request.complaint_type,
+        "severity": request.severity,
+        "is_anonymous": request.is_anonymous,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
     
-    from app.services.blockchain.crypto import sign_transaction
-    sign_transaction(blockchain_payload, "CITIZEN")
-    
     from app.services.blockchain.blockchain import blockchain
     blockchain.add_transaction(blockchain_payload)
-    block = blockchain.mine_pending_transactions(simulate=True)
+    block = blockchain.mine_pending_transactions(db, simulate=True) # Added db parameter
     
     try:
         new_complaint = Complaint(
@@ -163,22 +301,45 @@ def file_complaint(db: Session, beneficiary: Beneficiary, request: ComplaintCrea
             ration_card=beneficiary.ration_card,
             shop_id=target_shop_id,
             complaint_type=request.complaint_type,
-            description=request.description,
-            status="pending", # Standardized to lowercase
+            description=description,
+            severity=request.severity,
+            is_anonymous=request.is_anonymous,
+            attachment_url=request.attachment_url,
+            district=assigned_district,
+            status="pending",
             block_index=block.index,
             block_hash=block.hash
         )
         db.add(new_complaint)
+        db.flush() # Flush to get ID and ensure constraints hold
+        
+        # 6. Anomaly Bridge
+        active_count = db.query(func.count(Complaint.id)).filter(
+            Complaint.shop_id == target_shop_id,
+            Complaint.status != "RESOLVED"
+        ).scalar()
+        
+        if request.severity == "urgent" or active_count >= 3:
+            anomaly = Anomaly(
+                shop_id=target_shop_id,
+                anomaly_type="grievance_spike" if active_count >= 3 else "urgent_grievance",
+                severity="high" if request.severity == "urgent" else "medium",
+                description=f"Action Required: {active_count} active grievances. Latest: {request.complaint_type}",
+                confidence=0.9,
+                is_simulated=False
+            )
+            db.add(anomaly)
+
         db.commit()
         db.refresh(new_complaint)
         
-        # Stage 2: Blockchain Commit natively
-        blockchain.commit_block(block)
+        # Finalize blockchain block
+        blockchain.commit_block(db, block)
     except Exception as e:
         db.rollback()
         blockchain.discard_pending()
-        logger.error(f"Complaint ingestion failed, rolling back chain: {e}")
-        raise HTTPException(status_code=500, detail="Failed to save complaint due to integrity error")
+        logger.error(f"Complaint ingestion failed: {e}")
+        raise HTTPException(status_code=500, detail="Grievance registration failed. Please try again.")
         
     return new_complaint.__dict__
 

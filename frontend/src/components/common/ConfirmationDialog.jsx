@@ -22,7 +22,7 @@ export default function ConfirmationDialog({
                         </div>
                         <div>
                             <h3 className="text-lg font-semibold text-gray-900 mb-1">{title}</h3>
-                            <p className="text-sm text-gray-600 leading-relaxed">{message}</p>
+                            <div className="text-sm text-gray-600 leading-relaxed">{message}</div>
                         </div>
                     </div>
                 </div>
@@ -36,8 +36,8 @@ export default function ConfirmationDialog({
                     <button
                         onClick={onConfirm}
                         className={`px-4 py-2 text-sm font-medium text-white rounded-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${isDestructive
-                                ? 'bg-red-600 hover:bg-red-700 focus:ring-red-600'
-                                : 'bg-[#003366] hover:bg-[#002244] focus:ring-[#003366]'
+                            ? 'bg-red-600 hover:bg-red-700 focus:ring-red-600'
+                            : 'bg-[#003366] hover:bg-[#002244] focus:ring-[#003366]'
                             }`}
                     >
                         {confirmText}

@@ -10,3 +10,4 @@ from app.models.notification import Notification  # noqa: F401
 from app.models.scheduled_report import ScheduledReport  # noqa: F401
 from app.models.monthly_analytics import MonthlyAnalytics  # noqa: F401
 from app.models.family_member import FamilyMember  # noqa: F401
+from app.models.sms_log import SmsLog  # noqa: F401

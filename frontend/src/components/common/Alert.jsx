@@ -43,7 +43,7 @@ export default function Alert() {
     const config = typeConfig[alert.type] || typeConfig.info;
 
     return (
-        <div className="fixed top-4 right-4 z-50 flex items-start max-w-sm w-full shadow-sm animate-in slide-in-from-top-2">
+        <div className="fixed top-20 right-4 z-[9999] flex items-start max-w-sm w-full shadow-sm animate-in slide-in-from-top-2">
             <div className={cn(
                 "flex w-full overflow-hidden border-l-4 rounded-sm bg-white shadow-sm ring-1 ring-black/5",
                 config.border

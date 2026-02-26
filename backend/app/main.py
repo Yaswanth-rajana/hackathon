@@ -19,6 +19,8 @@ from app.models.notification import Notification  # noqa: F401
 from app.models.entitlement import Entitlement  # noqa: F401
 from app.models.idempotency import IdempotencyKey # noqa: F401
 from app.models.simulation import EntitlementSimulationBackup, SimulationEvent, SimulationBaseline # noqa: F401
+from app.models.inspection import Inspection # noqa: F401
+from app.models.sms_log import SmsLog # noqa: F401
 
 # Setup structured JSON logging
 structlog.configure(
@@ -138,7 +140,34 @@ from app.routes.admin_schedule_routes import router as admin_schedule_router
 from app.routes.admin_forecast_routes import router as admin_forecast_router
 from app.routes.admin_dealer_routes import router as admin_dealer_router
 from app.routers.admin_simulation_router import router as admin_simulation_router
+from app.routes.admin_alert_routes import router as admin_alert_router
 from app.routers.admin_audit_router import router as admin_manual_audit_router
+from app.routes.admin_governance_inspection_routes import router as admin_governance_inspection_router
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.exceptions import HTTPException
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, HTTPException):
+        return await http_exception_handler(request, exc)
+    
+    logger.error(
+        "Unhandled exception", 
+        error=str(exc),
+        path=request.url.path,
+        method=request.method
+    )
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "status": "error",
+            "message": "Internal Server Error",
+            "type": exc.__class__.__name__
+        }
+    )
 
 app.include_router(admin_analytics_router, prefix="/api/admin/analytics", tags=["Admin Analytics"])
 app.include_router(admin_reports_router, prefix="/api/admin/reports", tags=["Admin Reports"])
@@ -154,6 +183,12 @@ app.include_router(
     admin_manual_audit_router,
     prefix="/api/admin/audit",
     tags=["Admin Audit"]
+)
+app.include_router(admin_alert_router)
+app.include_router(
+    admin_governance_inspection_router,
+    prefix="/api/admin/governance/inspections",
+    tags=["Admin Governance Inspections"]
 )
 
 from app.utils.cache import init_redis_cache

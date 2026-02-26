@@ -58,7 +58,7 @@ const LiveAlerts = ({ alerts, loading, error, onDismiss, page, setPage, total, l
                             </div>
                         ))}
                     </div>
-                ) : displayedAlerts.length === 0 ? (
+                ) : (!displayedAlerts || displayedAlerts.length === 0) ? (
                     <div className="flex flex-col justify-center items-center text-center h-full py-10" style={{ minHeight: '200px' }}>
                         <span style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🛡️</span>
                         <p style={{ fontWeight: '700', color: '#15803d', margin: 0 }}>No fraud alerts at this time</p>
@@ -66,7 +66,7 @@ const LiveAlerts = ({ alerts, loading, error, onDismiss, page, setPage, total, l
                     </div>
                 ) : (
                     <ul className="space-y-3">
-                        {displayedAlerts.map(alert => (
+                        {displayedAlerts?.map(alert => (
                             <li
                                 key={alert.id}
                                 className={`p-4 rounded border ${borderColors[alert.severity] || 'border-l-gray-300'} border-l-4 bg-gray-50 flex flex-col gap-2 hover:bg-gray-100 transition-colors`}
@@ -77,7 +77,7 @@ const LiveAlerts = ({ alerts, loading, error, onDismiss, page, setPage, total, l
                                             {alert.severity}
                                         </span>
                                         <span className="text-sm text-gray-500">
-                                            {new Date(alert.detected_at).toLocaleString()}
+                                            {alert.detected_at ? new Date(alert.detected_at).toLocaleString() : 'N/A'}
                                         </span>
                                     </div>
                                     <button

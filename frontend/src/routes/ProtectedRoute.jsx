@@ -13,7 +13,7 @@ const ProtectedRoute = ({ children, allowedRole }) => {
     }
 
     if (!token && !localStorage.getItem('dealer_access_token')) {
-        return <Navigate to="/dealer/login" replace />;
+        return <Navigate to="/login" replace />;
     }
 
     if (allowedRole && user?.role && user.role !== allowedRole) {

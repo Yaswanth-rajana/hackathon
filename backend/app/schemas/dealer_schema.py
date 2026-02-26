@@ -15,7 +15,6 @@ class BeneficiaryResponse(BaseModel):
         from_attributes = True
 
 class LinkMobileRequest(BaseModel):
-    ration_card: str
     mobile: str = Field(pattern=r"^\d{10}$")
 
 class SetPinRequest(BaseModel):
@@ -53,6 +52,7 @@ class DistributeRequest(BaseModel):
     sugar: float
     cash_collected: float = 0.0
     payment_mode: str = "free"
+    notes: Optional[str] = None
 
 class DistributeResponse(BaseModel):
     message: str
@@ -91,3 +91,14 @@ class PerformanceResponse(BaseModel):
     compliance_score: float
     mandal_avg: float
     difference: float
+
+class TransactionHistoryItem(BaseModel):
+    transaction_id: str
+    timestamp: datetime
+    transaction_type: str
+    block_index: Optional[int] = None
+    notes: Optional[str] = None
+    items: Dict[str, float]
+
+class AuditTraceResponse(BaseModel):
+    history: List[TransactionHistoryItem]

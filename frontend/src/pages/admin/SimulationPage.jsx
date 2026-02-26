@@ -2,13 +2,18 @@ import React, { useState, useRef, useEffect } from 'react';
 import adminSimulationApi from '../../api/adminSimulation';
 import AdminOverviewPanel from '../../components/admin/dashboard/AdminOverviewPanel';
 import BlockDetailsModal from '../../components/admin/dashboard/BlockDetailsModal';
-import { Play, RotateCcw, Zap, Ghost, Package, MessageSquare, Brain, Terminal, ChevronDown, ChevronUp, AlertCircle, FileSearch } from 'lucide-react';
+import { Play, RotateCcw, Zap, Ghost, Package, MessageSquare, Brain, Terminal, ChevronDown, ChevronUp, AlertCircle, FileSearch, Wifi, WifiOff } from 'lucide-react';
+import { useAlert } from '../../context/AlertContext';
+import { useAdminWebSocket } from '../../context/WebSocketContext';
 
 const SimulationPage = () => {
     const dashboardRef = useRef(null);
     const [loading, setLoading] = useState(false);
+    const [pendingRequest, setPendingRequest] = useState(false);
     const [shopId] = useState('DEMO_001'); // Default demo shop
     const [selectedBlock, setSelectedBlock] = useState(null);
+    const { showAlert } = useAlert();
+    const { connected, registerOnConnect } = useAdminWebSocket();
 
     // Control States
     const [ghostCount, setGhostCount] = useState(50);
@@ -41,45 +46,89 @@ const SimulationPage = () => {
         fetchHistory();
     }, [shopId]);
 
+    // Auto-refresh on WebSocket reconnect
+    useEffect(() => {
+        if (registerOnConnect) {
+            const unregister = registerOnConnect(() => {
+                if (dashboardRef.current) {
+                    console.log("WebSocket reconnected, triggering UI resync...");
+                    dashboardRef.current.refresh();
+                    addLog("System Link restored. Synchronizing UI...", 'info');
+                }
+            });
+            return unregister;
+        }
+    }, [registerOnConnect]);
+
+    // Emergency Reset Handler (CTRL + SHIFT + R)
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key === 'R') {
+                e.preventDefault();
+                // DEMO_MODE guard is normally on backend, but we check here too if available
+                handleReset();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
     const handleInjectGhosts = async () => {
+        if (pendingRequest) return;
         try {
+            setPendingRequest(true);
             setLoading(true);
             await adminSimulationApi.injectGhosts(shopId, ghostCount, Math.floor(Math.random() * 1000));
             addLog(`Injected ${ghostCount} ghost beneficiaries into ${shopId}`, 'success');
+            if (dashboardRef.current) dashboardRef.current.refresh();
         } catch (err) {
             addLog(`Ghost injection failed: ${err.message}`, 'error');
+            showAlert(`Ghost injection failed: ${err.message}`, 'error');
         } finally {
             setLoading(false);
+            setPendingRequest(false);
         }
     };
 
     const handleInjectMismatch = async () => {
+        if (pendingRequest) return;
         try {
+            setPendingRequest(true);
             setLoading(true);
             const monthYear = new Date().toISOString().slice(0, 7); // YYYY-MM
             await adminSimulationApi.injectStockMismatch(shopId, inflationFactor, monthYear);
             addLog(`Injected ${inflationFactor}x stock mismatch for ${monthYear}`, 'success');
+            if (dashboardRef.current) dashboardRef.current.refresh();
         } catch (err) {
             addLog(`Stock mismatch injection failed: ${err.message}`, 'error');
+            showAlert(`Stock mismatch injection failed: ${err.message}`, 'error');
         } finally {
             setLoading(false);
+            setPendingRequest(false);
         }
     };
 
     const handleInjectComplaints = async () => {
+        if (pendingRequest) return;
         try {
+            setPendingRequest(true);
             setLoading(true);
             await adminSimulationApi.injectComplaints(shopId, complaintCount, Math.floor(Math.random() * 1000));
             addLog(`Injected ${complaintCount} complaint spikes`, 'success');
+            if (dashboardRef.current) dashboardRef.current.refresh();
         } catch (err) {
             addLog(`Complaint spike injection failed: ${err.message}`, 'error');
+            showAlert(`Complaint spike injection failed: ${err.message}`, 'error');
         } finally {
             setLoading(false);
+            setPendingRequest(false);
         }
     };
 
     const runScenario = async (intensity) => {
+        if (pendingRequest) return;
         try {
+            setPendingRequest(true);
             setLoading(true);
             addLog(`Running ${intensity.toUpperCase()} intensity scenario...`, 'scenario');
 
@@ -96,15 +145,20 @@ const SimulationPage = () => {
             ]);
 
             addLog(`Scenario ${intensity.toUpperCase()} deployed successfully.`, 'success');
+            if (dashboardRef.current) dashboardRef.current.refresh();
         } catch (err) {
             addLog(`Scenario failed: ${err.message}`, 'error');
+            showAlert(`Scenario failed: ${err.message}`, 'error');
         } finally {
             setLoading(false);
+            setPendingRequest(false);
         }
     };
 
     const handleRunAudit = async () => {
+        if (pendingRequest) return;
         try {
+            setPendingRequest(true);
             setLoading(true);
             addLog("Executing AI Audit...", 'audit');
             const res = await adminSimulationApi.runAudit(shopId);
@@ -123,22 +177,28 @@ const SimulationPage = () => {
             if (dashboardRef.current) dashboardRef.current.refresh();
         } catch (err) {
             addLog(`Audit failed: ${err.message}`, 'error');
+            showAlert(`Audit failed: ${err.message}`, 'error');
         } finally {
             setLoading(false);
+            setPendingRequest(false);
         }
     };
 
     const handleReset = async () => {
+        if (pendingRequest) return;
         if (!window.confirm("RESET DEMO: This will purge all simulated data for this shop. Continue?")) return;
         try {
+            setPendingRequest(true);
             setLoading(true);
             await adminSimulationApi.resetDemo(shopId);
             addLog(`Shop ${shopId} restored to clean state.`, 'reset');
             if (dashboardRef.current) dashboardRef.current.refresh();
         } catch (err) {
             addLog(`Reset failed: ${err.message}`, 'error');
+            showAlert(`Reset failed: ${err.message}`, 'error');
         } finally {
             setLoading(false);
+            setPendingRequest(false);
         }
     };
 
@@ -155,6 +215,11 @@ const SimulationPage = () => {
                         <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
                             <Zap className="text-yellow-400 fill-yellow-400" />
                             Admin Simulation Mission Control
+                            <div className={`ml-4 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 ${connected ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
+                                <div className={`h-2 w-2 rounded-full ${connected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                                {connected ? 'SYSTEM LINK ACTIVE' : 'SYSTEM LINK ERROR'}
+                                {!connected && <WifiOff size={12} />}
+                            </div>
                         </h1>
                         <p className="text-slate-400 mt-2 max-w-2xl">
                             Stress test RationShield's AI & Blockchain layers. Inject fraud scenarios at scale and watch the system's real-time defensive reaction.
@@ -164,16 +229,16 @@ const SimulationPage = () => {
                     <div className="flex gap-3">
                         <button
                             onClick={handleReset}
-                            disabled={loading}
-                            className="flex items-center gap-2 px-5 py-3 bg-red-600/20 hover:bg-red-600/30 border border-red-500/50 text-red-400 rounded-xl font-bold transition-all"
+                            disabled={loading || pendingRequest}
+                            className={`flex items-center gap-2 px-5 py-3 ${loading || pendingRequest ? 'bg-slate-700 text-slate-500' : 'bg-red-600/20 hover:bg-red-600/30 border border-red-500/50 text-red-400'} rounded-xl font-bold transition-all`}
                         >
                             <RotateCcw size={18} />
                             RESET DEMO
                         </button>
                         <button
                             onClick={handleRunAudit}
-                            disabled={loading}
-                            className="flex items-center gap-2 px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-900/40 transform hover:-translate-y-0.5 active:translate-y-0 transition-all"
+                            disabled={loading || pendingRequest}
+                            className={`flex items-center gap-2 px-8 py-3 ${loading || pendingRequest ? 'bg-slate-700 text-slate-400' : 'bg-blue-600 hover:bg-blue-500 text-white'} rounded-xl font-bold shadow-lg shadow-blue-900/40 transform hover:-translate-y-0.5 active:translate-y-0 transition-all`}
                         >
                             {loading ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white" /> : <Brain size={20} />}
                             RUN AI AUDIT
@@ -205,7 +270,8 @@ const SimulationPage = () => {
                                 />
                                 <button
                                     onClick={handleInjectGhosts}
-                                    className="w-full py-2 bg-slate-50 hover:bg-blue-600 hover:text-white text-slate-700 font-semibold rounded-lg transition-all border border-slate-200 hover:border-blue-600"
+                                    disabled={loading || pendingRequest}
+                                    className={`w-full py-2 ${loading || pendingRequest ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-50 hover:bg-blue-600 hover:text-white text-slate-700'} font-semibold rounded-lg transition-all border border-slate-200 hover:border-blue-600`}
                                 >
                                     Inject Ghosts
                                 </button>
@@ -231,7 +297,8 @@ const SimulationPage = () => {
                                 />
                                 <button
                                     onClick={handleInjectMismatch}
-                                    className="w-full py-2 bg-slate-50 hover:bg-purple-600 hover:text-white text-slate-700 font-semibold rounded-lg transition-all border border-slate-200 hover:border-purple-600"
+                                    disabled={loading || pendingRequest}
+                                    className={`w-full py-2 ${loading || pendingRequest ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-50 hover:bg-purple-600 hover:text-white text-slate-700'} font-semibold rounded-lg transition-all border border-slate-200 hover:border-purple-600`}
                                 >
                                     Inflate Stock
                                 </button>
@@ -257,7 +324,8 @@ const SimulationPage = () => {
                                 />
                                 <button
                                     onClick={handleInjectComplaints}
-                                    className="w-full py-2 bg-slate-50 hover:bg-amber-600 hover:text-white text-slate-700 font-semibold rounded-lg transition-all border border-slate-200 hover:border-amber-600"
+                                    disabled={loading || pendingRequest}
+                                    className={`w-full py-2 ${loading || pendingRequest ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-50 hover:bg-amber-600 hover:text-white text-slate-700'} font-semibold rounded-lg transition-all border border-slate-200 hover:border-amber-600`}
                                 >
                                     Force Complaints
                                 </button>
@@ -277,21 +345,24 @@ const SimulationPage = () => {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <button
                                 onClick={() => runScenario('low')}
-                                className="p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-emerald-500 hover:bg-emerald-50 transition-all flex flex-col gap-1 items-start group"
+                                disabled={loading || pendingRequest}
+                                className={`p-4 rounded-xl border ${loading || pendingRequest ? 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed' : 'bg-slate-50 border-slate-100 hover:border-emerald-500 hover:bg-emerald-50'} transition-all flex flex-col gap-1 items-start group`}
                             >
                                 <span className="text-emerald-700 font-bold group-hover:scale-110 transition-transform">🟢 LOW IMPACT</span>
                                 <span className="text-xs text-slate-500 text-left">20 ghosts + 5 complaints</span>
                             </button>
                             <button
                                 onClick={() => runScenario('medium')}
-                                className="p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-amber-500 hover:bg-amber-50 transition-all flex flex-col gap-1 items-start group"
+                                disabled={loading || pendingRequest}
+                                className={`p-4 rounded-xl border ${loading || pendingRequest ? 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed' : 'bg-slate-50 border-slate-100 hover:border-amber-500 hover:bg-amber-50'} transition-all flex flex-col gap-1 items-start group`}
                             >
                                 <span className="text-amber-700 font-bold group-hover:scale-110 transition-transform">🟡 MEDIUM IMPACT</span>
                                 <span className="text-xs text-slate-500 text-left">100 ghosts + 20 complaints + 1.3x mismatch</span>
                             </button>
                             <button
                                 onClick={() => runScenario('high')}
-                                className="p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-red-500 hover:bg-red-50 transition-all flex flex-col gap-1 items-start group"
+                                disabled={loading || pendingRequest}
+                                className={`p-4 rounded-xl border ${loading || pendingRequest ? 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed' : 'bg-slate-50 border-slate-100 hover:border-red-500 hover:bg-red-50'} transition-all flex flex-col gap-1 items-start group`}
                             >
                                 <span className="text-red-700 font-bold group-hover:scale-110 transition-transform">🔴 HIGH IMPACT (WOW)</span>
                                 <span className="text-xs text-slate-500 text-left">250 ghosts + 60 complaints + 1.7x mismatch</span>

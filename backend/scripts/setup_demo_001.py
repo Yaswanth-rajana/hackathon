@@ -33,13 +33,59 @@ def setup_demo_shop():
         db.query(RiskScore).filter(RiskScore.shop_id == shop_id).delete()
         db.query(Beneficiary).filter(Beneficiary.shop_id == shop_id).delete()
         db.query(Shop).filter(Shop.id == shop_id).delete()
+        
+        # Cleanup ALL alerts for demo freshness
+        from app.models.alert import Alert, AlertStatus, AlertSeverity
+        db.query(Alert).delete()
+        db.commit()
+
+        print("Seeding Governance Alerts...")
+        historical_alerts = [
+            Alert(
+                id="ALR-F29D1",
+                severity=AlertSeverity.CRITICAL,
+                type="ML_FRAUD",
+                district="Visakhapatnam",
+                entity_id="SHOP_1023",
+                description="Ghost beneficiaries detected in morning shift",
+                detected_by="ML",
+                status=AlertStatus.OPEN,
+                created_at=datetime(2026, 2, 24, 12, 3),
+                block_index=8
+            ),
+            Alert(
+                id="ALR-C887A",
+                severity=AlertSeverity.HIGH,
+                type="RULE_COMPLAINT_SPIKE",
+                district="Guntur",
+                entity_id="SHOP_887",
+                description="35 complaints recorded in under 2 hours",
+                detected_by="System",
+                status=AlertStatus.ACKNOWLEDGED,
+                created_at=datetime(2026, 2, 24, 11, 45),
+                acknowledged_by="Admin Rajana"
+            ),
+            Alert(
+                id="ALR-S001X",
+                severity=AlertSeverity.INFO,
+                type="SYSTEM_MAINTENANCE",
+                district="Andhra Pradesh (HQ)",
+                entity_id="SERVER_01",
+                description="ML Prediction model retrained on Jan data",
+                detected_by="System",
+                status=AlertStatus.RESOLVED,
+                created_at=datetime(2026, 2, 24, 10, 10),
+                resolved_at=datetime(2026, 2, 24, 10, 30)
+            )
+        ]
+        db.add_all(historical_alerts)
         db.commit()
 
         print("Setting up Shop...")
         shop = Shop(
             id=shop_id,
             name="Ideal Demo FPS",
-            address="Demo District, Center",
+            address="Visakhapatnam Central",
             stock_wheat=5000,
             stock_rice=10000,
             stock_sugar=2000,
@@ -58,7 +104,7 @@ def setup_demo_shop():
                 account_status="active",
                 mobile=f"99988877{i:02d}",
                 is_active=True,
-                district="Demo District"
+                district="Visakhapatnam"
             )
             db.add(ben)
             

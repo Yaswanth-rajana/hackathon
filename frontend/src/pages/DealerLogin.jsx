@@ -107,7 +107,7 @@ export default function DealerLogin() {
                     RationShield
                 </h2>
                 <p className="mt-2 text-sm text-gray-600 font-medium uppercase tracking-widest">
-                    Citizen & Dealer Portal
+                    Unified Public Distribution System
                 </p>
             </div>
 
@@ -116,7 +116,7 @@ export default function DealerLogin() {
                     <div className="mb-6 pb-4 border-b border-gray-100 flex items-center justify-center gap-2">
                         <Lock className="w-5 h-5 text-[#003366]" />
                         <h3 className="text-lg font-bold text-gray-900 uppercase tracking-wide">
-                            Dealer Login
+                            {loginType === 'citizen' ? 'Citizen Login' : loginType === 'dealer' ? 'Dealer Login' : 'Admin Login'}
                         </h3>
                     </div>
 

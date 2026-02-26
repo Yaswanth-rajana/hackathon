@@ -7,7 +7,7 @@ export default function FamilyMembersPanel() {
     const [members, setMembers] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
-    const [formData, setFormData] = useState({ name: '', aadhaar_num: '', relation: '', age: '' });
+    const [formData, setFormData] = useState({ name: '', aadhaar_masked: '', relation: '', age: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { showAlert } = useAlert();
 
@@ -37,7 +37,7 @@ export default function FamilyMembersPanel() {
             });
             showAlert("Family member added. Verification pending.", "success");
             setShowForm(false);
-            setFormData({ name: '', aadhaar_num: '', relation: '', age: '' });
+            setFormData({ name: '', aadhaar_masked: '', relation: '', age: '' });
             fetchMembers();
         } catch (err) {
             showAlert(err.response?.data?.detail || "Failed to add family member", "error");
@@ -96,10 +96,16 @@ export default function FamilyMembersPanel() {
                             <input
                                 type="text"
                                 required
-                                pattern="[0-9]{12}"
-                                value={formData.aadhaar_num}
-                                onChange={e => setFormData({ ...formData, aadhaar_num: e.target.value })}
+                                maxLength={12}
+                                value={formData.aadhaar_masked}
+                                onChange={e => {
+                                    const val = e.target.value.replace(/\D/g, '');
+                                    if (val.length <= 12) {
+                                        setFormData({ ...formData, aadhaar_masked: val });
+                                    }
+                                }}
                                 className="w-full text-sm border-gray-300 rounded focus:ring-emerald-500 focus:border-emerald-500 p-2 border bg-white"
+                                placeholder="12-digit Aadhaar Number"
                             />
                         </div>
                         <div>
@@ -122,8 +128,13 @@ export default function FamilyMembersPanel() {
                             <input
                                 type="number"
                                 required
-                                min="0" max="150"
+                                min="0" max="120"
                                 value={formData.age}
+                                onKeyDown={e => {
+                                    if (['e', 'E', '+', '-', '.'].includes(e.key)) {
+                                        e.preventDefault();
+                                    }
+                                }}
                                 onChange={e => setFormData({ ...formData, age: e.target.value })}
                                 className="w-full text-sm border-gray-300 rounded focus:ring-emerald-500 focus:border-emerald-500 p-2 border bg-white"
                             />

@@ -12,6 +12,13 @@ class Complaint(Base):
     shop_id = Column(String, nullable=False)
     complaint_type = Column(String, nullable=False)
     description = Column(Text, nullable=True)
+    
+    # --- Governance Upgrades ---
+    severity = Column(String(10), default="minor")  # minor | major | urgent
+    is_anonymous = Column(Boolean, default=False)
+    attachment_url = Column(String, nullable=True)
+    district = Column(String(50), nullable=False) # Mandatory backend-side assignment
+    
     block_index = Column(Integer, nullable=True)
     block_hash = Column(String, nullable=True, index=True)
     status = Column(String, default="NEW")  # NEW, ASSIGNED, INVESTIGATING, RESOLVED

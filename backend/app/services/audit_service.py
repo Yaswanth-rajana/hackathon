@@ -175,6 +175,25 @@ class AuditService:
             db.rollback()
             # If transaction failed, discard the pending block changes to avoid chain desync.
             blockchain.discard_pending()
+            
+            # Check for concurrency (IntegrityError usually on RiskScore or Blockchain index)
+            from sqlalchemy.exc import IntegrityError
+            if isinstance(e, IntegrityError):
+                # Fetch existing audit state to return to UI
+                existing_score = db.query(RiskScore).filter(
+                    RiskScore.shop_id == shop_id,
+                    RiskScore.month == current_month
+                ).first()
+                
+                if existing_score:
+                    return {
+                        "status": "concurrent",
+                        "shop_id": shop_id,
+                        "risk_score": round(existing_score.risk_score, 1),
+                        "severity": str(existing_score.risk_level).lower(),
+                        "message": "Concurrent audit detected. System preserved consistency.",
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
             raise e
 
         # STEP 8: WebSocket Broadcast (AFTER COMMIT!)

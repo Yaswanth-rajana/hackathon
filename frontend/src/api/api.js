@@ -10,6 +10,8 @@ api.interceptors.request.use((config) => {
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
+    const district = localStorage.getItem("selected_district") || "Visakhapatnam";
+    config.headers['X-District'] = district;
     return config;
 });
 
