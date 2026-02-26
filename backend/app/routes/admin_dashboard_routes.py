@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import get_db
 from app.models.user import User, UserRole
@@ -14,6 +14,7 @@ from app.models.complaint import Complaint
 from app.models.anomaly import Anomaly
 from app.models.audit import Audit
 from app.models.transaction import Transaction
+from app.models.suspension_record import SuspensionRecord
 from app.core.dependencies import get_current_user
 from app.schemas.admin_dashboard_schema import (
     DashboardSummaryResponse, AlertsPaginatedResponse, AlertResponse,
@@ -60,7 +61,7 @@ def get_dashboard_summary(
         
     high_risk_shops = risk_query.count()
     
-    start_of_month = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    start_of_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     complaint_query = db.query(Complaint).join(Shop, Complaint.shop_id == Shop.id).filter(
         Complaint.created_at >= start_of_month
     )
@@ -162,14 +163,18 @@ def get_heatmap(
     
     mandal_stats = {}
     for mandal, r_score, f_type in shop_risks:
-        if mandal not in mandal_stats:
-            mandal_stats[mandal] = {"scores": [], "fraud_counts": {}}
+        mandal_name = (mandal or "Unassigned").strip() if isinstance(mandal, str) else "Unassigned"
+        if not mandal_name:
+            mandal_name = "Unassigned"
+
+        if mandal_name not in mandal_stats:
+            mandal_stats[mandal_name] = {"scores": [], "fraud_counts": {}}
             
         score = r_score or 0
-        mandal_stats[mandal]["scores"].append(score)
+        mandal_stats[mandal_name]["scores"].append(score)
         
         if f_type:
-            mandal_stats[mandal]["fraud_counts"][f_type] = mandal_stats[mandal]["fraud_counts"].get(f_type, 0) + 1
+            mandal_stats[mandal_name]["fraud_counts"][f_type] = mandal_stats[mandal_name]["fraud_counts"].get(f_type, 0) + 1
             
     res = []
     for mandal, stats in mandal_stats.items():
@@ -204,10 +209,31 @@ def get_high_risk_shops(
     audit_subq = db.query( Audit.shop_id, func.max(Audit.completed_date).label('max_date') ).group_by(Audit.shop_id).subquery()
     latest_audit = db.query(Audit).join( audit_subq, (Audit.shop_id == audit_subq.c.shop_id) & (Audit.completed_date == audit_subq.c.max_date) ).subquery()
 
-    query = db.query(Shop, latest_risk.c.risk_score, latest_risk.c.fraud_type, latest_audit.c.completed_date).join(
+    # Latest public suspension proof per shop
+    proof_subq = db.query(
+        SuspensionRecord.shop_id,
+        func.max(SuspensionRecord.created_at).label("max_created_at")
+    ).group_by(SuspensionRecord.shop_id).subquery()
+    latest_proof = db.query(SuspensionRecord).join(
+        proof_subq,
+        (SuspensionRecord.shop_id == proof_subq.c.shop_id) & (SuspensionRecord.created_at == proof_subq.c.max_created_at)
+    ).subquery()
+
+    query = db.query(
+        Shop,
+        latest_risk.c.risk_score,
+        latest_risk.c.fraud_type,
+        latest_audit.c.completed_date,
+        User.dealer_status,
+        latest_proof.c.public_id
+    ).join(
         latest_risk, Shop.id == latest_risk.c.shop_id
     ).outerjoin(
         latest_audit, Shop.id == latest_audit.c.shop_id
+    ).outerjoin(
+        User, User.id == Shop.dealer_id
+    ).outerjoin(
+        latest_proof, Shop.id == latest_proof.c.shop_id
     ).filter(
         latest_risk.c.risk_score >= 60
     )
@@ -218,11 +244,18 @@ def get_high_risk_shops(
     items = query.order_by(desc(latest_risk.c.risk_score)).offset((page - 1) * limit).limit(limit).all()
 
     data = []
-    for shop, risk_score, fraud_type, last_audit in items:
+    for shop, risk_score, fraud_type, last_audit, dealer_status, public_proof_id in items:
+        mandal_name = (shop.mandal or "Unassigned").strip() if isinstance(shop.mandal, str) else "Unassigned"
+        if not mandal_name:
+            mandal_name = "Unassigned"
+
         audit_str = last_audit.strftime("%Y-%m-%d") if last_audit else None
         data.append(HighRiskShopResponse(
-            shop_id=shop.id, shop_name=shop.name, mandal=shop.mandal,
-            risk_score=risk_score, fraud_type=fraud_type, last_audit=audit_str
+            shop_id=shop.id, shop_name=shop.name, mandal=mandal_name,
+            risk_score=risk_score, fraud_type=fraud_type, last_audit=audit_str,
+            shop_status=(shop.status or "active").lower(),
+            dealer_status=(dealer_status or "active").lower(),
+            public_proof_id=public_proof_id
         ))
             
     return HighRiskShopsPaginatedResponse(data=data)

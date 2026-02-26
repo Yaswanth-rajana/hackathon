@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from app.database import get_db
@@ -174,7 +174,7 @@ def resolve_complaint(
         
     complaint.status = "RESOLVED"
     complaint.resolution_notes = payload.resolution_notes
-    complaint.resolved_at = datetime.utcnow()
+    complaint.resolved_at = datetime.now(timezone.utc)
     db.commit()
     
     return MessageResponse(message="Complaint resolved successfully")

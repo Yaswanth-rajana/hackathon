@@ -1,5 +1,5 @@
 from sqlalchemy import Column, String, Integer, Float, DateTime, JSON, PrimaryKeyConstraint
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import Base
 
 
@@ -11,7 +11,7 @@ class EntitlementSimulationBackup(Base):
     wheat_kg = Column(Integer, nullable=False)
     rice_kg = Column(Integer, nullable=False)
     sugar_kg = Column(Integer, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         PrimaryKeyConstraint("ration_card", "month_year"),
@@ -29,7 +29,7 @@ class SimulationBaseline(Base):
     anomaly_count = Column(Integer, nullable=False, default=0)
     risk_level = Column(String(50), nullable=True)
     hash_of_baseline = Column(String(255), nullable=True)
-    snapshot_time = Column(DateTime, default=datetime.utcnow)
+    snapshot_time = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class SimulationEvent(Base):
@@ -40,4 +40,4 @@ class SimulationEvent(Base):
     event_type = Column(String(50), nullable=False)
     event_details = Column(JSON, nullable=True)
     executed_by = Column(String(50), nullable=True)
-    executed_at = Column(DateTime, default=datetime.utcnow)
+    executed_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

@@ -2,7 +2,9 @@ import logging
 import os
 import structlog
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
 from app.routers import auth_router, dealer_router, transaction_router, blockchain_router, admin_router, citizen_router
 from app.routes.admin_dashboard_routes import router as admin_dashboard_router
 from app.database import Base, engine
@@ -21,6 +23,8 @@ from app.models.idempotency import IdempotencyKey # noqa: F401
 from app.models.simulation import EntitlementSimulationBackup, SimulationEvent, SimulationBaseline # noqa: F401
 from app.models.inspection import Inspection # noqa: F401
 from app.models.sms_log import SmsLog # noqa: F401
+from app.models.suspension_record import SuspensionRecord # noqa: F401
+from scripts.phase1_db_migration import run_migration
 
 # Setup structured JSON logging
 structlog.configure(
@@ -32,13 +36,6 @@ structlog.configure(
     logger_factory=structlog.stdlib.LoggerFactory(),
 )
 logger = structlog.get_logger(__name__)
-
-# Create tables (for simplicity in sprint, though Alembic is PRO, 
-# prompt implicitly allows manual/auto creation. 
-# "Manually insert one dealer" implies tables must exist).
-from scripts.phase1_db_migration import run_migration
-run_migration()
-Base.metadata.create_all(bind=engine)
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -52,6 +49,10 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.PROJECT_VERSION
 )
+
+UPLOADS_DIR = Path(__file__).resolve().parents[1] / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 @app.middleware("http")
 async def add_security_headers_and_request_id(request: Request, call_next):
@@ -140,7 +141,9 @@ from app.routes.admin_schedule_routes import router as admin_schedule_router
 from app.routes.admin_forecast_routes import router as admin_forecast_router
 from app.routes.admin_dealer_routes import router as admin_dealer_router
 from app.routers.admin_simulation_router import router as admin_simulation_router
+from app.routers.admin_ml_router import router as admin_ml_router
 from app.routes.admin_alert_routes import router as admin_alert_router
+from app.routes.public_proof_routes import router as public_proof_router
 from app.routers.admin_audit_router import router as admin_manual_audit_router
 from app.routes.admin_governance_inspection_routes import router as admin_governance_inspection_router
 from fastapi import Request
@@ -185,6 +188,12 @@ app.include_router(
     tags=["Admin Audit"]
 )
 app.include_router(admin_alert_router)
+app.include_router(public_proof_router)
+app.include_router(
+    admin_ml_router,
+    prefix="/api/admin/ml",
+    tags=["Admin Intelligence"]
+)
 app.include_router(
     admin_governance_inspection_router,
     prefix="/api/admin/governance/inspections",
@@ -196,9 +205,33 @@ from app.services.blockchain.crypto import initialize_keys
 
 @app.on_event("startup")
 async def startup():
+    skip_db_init = os.getenv("SKIP_DB_INIT", "false").lower() == "true"
+    require_db_on_startup = os.getenv("REQUIRE_DB_ON_STARTUP", "false").lower() == "true"
+
+    if not skip_db_init:
+        try:
+            run_migration()
+            Base.metadata.create_all(bind=engine)
+            logger.info("Database initialization complete")
+        except Exception as exc:
+            logger.error("Database initialization failed", error=str(exc))
+            if require_db_on_startup:
+                raise
+
     await init_redis_cache()
     # Phase 3 Digital Signatures initialization (RSA Keys)
     initialize_keys()
+    # Ensure blockchain genesis block exists in DB (survives simulation resets & fresh DBs)
+    from app.services.blockchain.blockchain import blockchain
+    from app.database import SessionLocal
+    _db = SessionLocal()
+    try:
+        blockchain.ensure_genesis_exists(_db)
+        logger.info("Blockchain genesis block verified on startup")
+    except Exception as e:
+        logger.error(f"Failed to ensure blockchain genesis on startup: {e}")
+    finally:
+        _db.close()
 
 @app.get("/health")
 def health_check():

@@ -2,13 +2,13 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 class GhostInjectionRequest(BaseModel):
-    count: int = Field(50, ge=1, le=1000)
+    intensity: str = Field("MEDIUM", description="Simulation intensity: LOW, MEDIUM, or HIGH")
     seed: Optional[int] = None
 
 class StockMismatchRequest(BaseModel):
-    inflation_factor: float = Field(1.5, gt=1.0)
+    intensity: str = Field("MEDIUM", description="Simulation intensity: LOW, MEDIUM, or HIGH")
     month_year: Optional[str] = None
 
 class ComplaintSpikeRequest(BaseModel):
-    count: int = Field(20, ge=1, le=500)
+    intensity: str = Field("MEDIUM", description="Simulation intensity: LOW, MEDIUM, or HIGH")
     seed: Optional[int] = None

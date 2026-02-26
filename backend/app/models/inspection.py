@@ -1,5 +1,5 @@
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, JSON
-from datetime import datetime
+from sqlalchemy.sql import func
 from app.database import Base
 
 class Inspection(Base):
@@ -28,6 +28,6 @@ class Inspection(Base):
 
     blockchain_txn_id = Column(String(20), nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)

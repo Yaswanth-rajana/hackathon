@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, CheckC
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from app.database import Base
+from app.models.enums import TransactionType
 
 
 class Transaction(Base):
@@ -11,7 +12,7 @@ class Transaction(Base):
     block_index = Column(Integer, unique=True, index=True, nullable=False)
     shop_id = Column(String, index=True, nullable=False)
     ration_card = Column(String, index=True, nullable=False)
-    transaction_type = Column(String, nullable=False, default="distribution")
+    transaction_type = Column(String, nullable=False, default=TransactionType.DISTRIBUTION)
     
     # Use JSON with variant for SQLite testing support
     items = Column(JSON().with_variant(JSONB, 'postgresql'), nullable=False)
@@ -29,5 +30,5 @@ class Transaction(Base):
     __table_args__ = (
         CheckConstraint("cash_collected >= 0", name="check_cash_positive"),
         CheckConstraint("payment_mode IN ('free', 'subsidized', 'cash_compensation')", name="check_payment_mode"),
-        CheckConstraint("transaction_type IN ('DISTRIBUTION', 'ALLOCATION', 'COMPLAINT', 'CASH_TRANSFER')", name="check_transaction_type"),
+        CheckConstraint("transaction_type IN ('DISTRIBUTION', 'ALLOCATION', 'COMPLAINT', 'ML_ALERT', 'CASH_TRANSFER')", name="check_transaction_type"),
     )

@@ -29,7 +29,7 @@ const LiveAlerts = ({ alerts, loading, error, onDismiss, page, setPage, total, l
         : safeAlerts;
 
     return (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 flex flex-col h-full">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 flex flex-col h-[620px]">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                     Live Fraud Alerts
@@ -47,7 +47,7 @@ const LiveAlerts = ({ alerts, loading, error, onDismiss, page, setPage, total, l
                 </select>
             </div>
 
-            <div className="flex-1 overflow-y-auto min-h-[300px]">
+            <div className="flex-1 overflow-y-auto min-h-[300px] max-h-[480px] pr-1">
                 {loading ? (
                     <div className="flex flex-col gap-3 py-2">
                         {[...Array(4)].map((_, i) => (

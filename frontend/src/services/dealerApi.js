@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Base URL for API
-const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const baseURL = import.meta.env.VITE_API_URL || '/api';
 
 const dealerApi = axios.create({
     baseURL,

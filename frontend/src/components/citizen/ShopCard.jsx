@@ -33,10 +33,17 @@ export default function ShopCard({ shop }) {
                             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Assigned Fair Price Shop</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-1 px-3 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-widest rounded-full border border-emerald-100">
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        Licensed
-                    </div>
+                    {(shop.shop_status || '').toLowerCase() === 'under_review' ? (
+                        <div className="flex items-center gap-1 px-3 py-1 bg-red-50 text-red-700 text-[10px] font-black uppercase tracking-widest rounded-full border border-red-100">
+                            <ShieldAlert className="w-3.5 h-3.5" />
+                            Red Flag
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-1 px-3 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-widest rounded-full border border-emerald-100">
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            Licensed
+                        </div>
+                    )}
                 </div>
 
                 <div className="space-y-4">

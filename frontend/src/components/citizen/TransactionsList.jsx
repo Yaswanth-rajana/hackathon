@@ -12,6 +12,16 @@ async function computeSHA256(message) {
 
 export default function TransactionsList() {
     const [transactions, setTransactions] = useState([]);
+    const [totalTransactions, setTotalTransactions] = useState(0);
+    const [summary, setSummary] = useState({
+        total_wheat_received: 0,
+        total_rice_received: 0,
+        total_sugar_received: 0,
+        total_complaints_filed: 0,
+        total_shortfalls_detected: 0
+    });
+    const [showingFullHistory, setShowingFullHistory] = useState(false);
+    const [historyLoading, setHistoryLoading] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [verifying, setVerifying] = useState({});
     const [selectedTx, setSelectedTx] = useState(null);
@@ -21,9 +31,17 @@ export default function TransactionsList() {
     useEffect(() => {
         const fetchTransactions = async () => {
             try {
-                const data = await citizenActions.getTransactions();
+                const data = await citizenActions.getTransactions(10);
                 // Backend returns { transactions: [...], total: N }
                 setTransactions(Array.isArray(data) ? data : (data.transactions ?? []));
+                setTotalTransactions(Array.isArray(data) ? data.length : (data.total ?? 0));
+                setSummary(data?.summary || {
+                    total_wheat_received: 0,
+                    total_rice_received: 0,
+                    total_sugar_received: 0,
+                    total_complaints_filed: 0,
+                    total_shortfalls_detected: 0
+                });
             } catch (err) {
                 showAlert("Failed to load transactions", "error");
             } finally {
@@ -32,6 +50,29 @@ export default function TransactionsList() {
         };
         fetchTransactions();
     }, [showAlert]);
+
+    const toggleFullHistory = async () => {
+        setHistoryLoading(true);
+        try {
+            if (!showingFullHistory) {
+                const data = await citizenActions.getTransactions(500);
+                setTransactions(Array.isArray(data) ? data : (data.transactions ?? []));
+                setTotalTransactions(Array.isArray(data) ? data.length : (data.total ?? 0));
+                setSummary(data?.summary || summary);
+                setShowingFullHistory(true);
+            } else {
+                const data = await citizenActions.getTransactions(10);
+                setTransactions(Array.isArray(data) ? data : (data.transactions ?? []));
+                setTotalTransactions(Array.isArray(data) ? data.length : (data.total ?? 0));
+                setSummary(data?.summary || summary);
+                setShowingFullHistory(false);
+            }
+        } catch (err) {
+            showAlert("Failed to update history view", "error");
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
 
     const verifyTransaction = async (tx) => {
         const txId = tx.transaction_id;
@@ -119,6 +160,29 @@ export default function TransactionsList() {
                 </div>
             </div>
 
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
+                <div className="rounded-lg bg-blue-50 px-3 py-2">
+                    <p className="text-[9px] uppercase font-black tracking-widest text-blue-700">Wheat</p>
+                    <p className="text-sm font-black text-blue-900">{summary.total_wheat_received}kg</p>
+                </div>
+                <div className="rounded-lg bg-indigo-50 px-3 py-2">
+                    <p className="text-[9px] uppercase font-black tracking-widest text-indigo-700">Rice</p>
+                    <p className="text-sm font-black text-indigo-900">{summary.total_rice_received}kg</p>
+                </div>
+                <div className="rounded-lg bg-purple-50 px-3 py-2">
+                    <p className="text-[9px] uppercase font-black tracking-widest text-purple-700">Sugar</p>
+                    <p className="text-sm font-black text-purple-900">{summary.total_sugar_received}kg</p>
+                </div>
+                <div className="rounded-lg bg-amber-50 px-3 py-2">
+                    <p className="text-[9px] uppercase font-black tracking-widest text-amber-700">Complaints</p>
+                    <p className="text-sm font-black text-amber-900">{summary.total_complaints_filed}</p>
+                </div>
+                <div className="rounded-lg bg-rose-50 px-3 py-2">
+                    <p className="text-[9px] uppercase font-black tracking-widest text-rose-700">Shortfalls</p>
+                    <p className="text-sm font-black text-rose-900">{summary.total_shortfalls_detected}</p>
+                </div>
+            </div>
+
             {transactions.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-gray-400 py-12">
                     <Receipt className="w-16 h-16 mb-4 opacity-10" />
@@ -177,8 +241,18 @@ export default function TransactionsList() {
                         </div>
                     ))}
 
-                    <button className="w-full py-3 text-[10px] font-black uppercase tracking-widest text-[#005A9C] border-2 border-dashed border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
-                        View Full History (2025-2026)
+                    <button
+                        onClick={toggleFullHistory}
+                        disabled={historyLoading || totalTransactions <= 10}
+                        className="w-full py-3 text-[10px] font-black uppercase tracking-widest text-[#005A9C] border-2 border-dashed border-gray-100 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                        {historyLoading
+                            ? 'Loading...'
+                            : showingFullHistory
+                                ? 'Show Recent History'
+                                : totalTransactions <= 10
+                                    ? `Showing All Available Records (${totalTransactions})`
+                                    : `View Full Distribution History (${totalTransactions})`}
                     </button>
                 </div>
             )}

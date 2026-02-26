@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.models.user import User
 from app.models.transaction import Transaction
 from app.models.risk_score import RiskScore
@@ -8,7 +8,7 @@ from app.models.shop import Shop
 
 def get_weekly_performance(db: Session, dealer: User) -> dict:
     # 1. Daily Counts (Last 7 Days)
-    end_date = datetime.utcnow()
+    end_date = datetime.now(timezone.utc)
     start_date = end_date - timedelta(days=7)
     
     daily_counts_raw = db.query(

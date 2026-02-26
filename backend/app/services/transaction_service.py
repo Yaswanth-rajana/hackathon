@@ -9,6 +9,7 @@ from app.models.transaction import Transaction
 from app.models.beneficiary import Beneficiary
 from app.services import blockchain_service
 from app.services import risk_service
+from app.models.enums import TransactionType
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +85,7 @@ def distribute(
             "shop_id": current_user.shop_id,
             "ration_card": ration_card,
             "items": items,
-            "transaction_type": "distribution",
+            "transaction_type": TransactionType.DISTRIBUTION,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -103,7 +104,7 @@ def distribute(
             block_index=block_index,
             shop_id=current_user.shop_id,
             ration_card=ration_card,
-            transaction_type="distribution",
+            transaction_type=TransactionType.DISTRIBUTION,
             items=items,
             block_hash=block.block_hash,
             previous_hash=previous_hash,

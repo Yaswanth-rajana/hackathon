@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from app.models.complaint import Complaint
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 def get_complaints(db: Session, status: str = None, shop_id: str = None, search: str = None, skip: int = 0, limit: int = 20):
@@ -49,7 +49,7 @@ def add_note(db: Session, complaint_id: str, note_text: str):
     new_note = {
         "id": f"note_{uuid.uuid4().hex[:8]}",
         "note": note_text,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
     
     # SQLAlchemy JSON mutation

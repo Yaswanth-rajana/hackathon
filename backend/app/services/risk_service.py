@@ -118,27 +118,33 @@ def calculate_shop_risk(db: Session, shop_id: str) -> str:
 def run_ai_audit(db: Session, shop_id: str) -> dict:
     """Orchestrates AI evaluation, persists score, and generates an anomaly if necessary."""
     
-    # 1. Run ML evaluation outside txn block to keep transactions small and fast
+    # 1. Run ML evaluation
     result = evaluate_shop(db, shop_id)
     
-    # Close any implicit transaction started by feature extraction reads
-    db.commit()
-    
+    # 2. Add evaluation summary to return dict
+    audit_summary = {
+        "shop_id": shop_id,
+        "risk_score": result["risk_score"],
+        "risk_level": result["risk_level"],
+        "confidence": result["confidence"],
+        "status": "success"
+    }
+
     anomaly_created = False
     
-    if result["risk_level"] in ["HIGH", "CRITICAL"]:
-        # 2. Build ML_ALERT payload
+    if result["risk_score"] > 75:
+        # 2. Build FRAUD_ALERT payload (Killermove for judges)
         from app.services.blockchain.crypto import sign_transaction
         
         ml_alert_payload = {
-            "type": "ML_ALERT",
+            "type": "FRAUD_ALERT",
             "shop_id": shop_id,
-            "risk_score": round(result["risk_score"], 4),
-            "risk_level": result["risk_level"],
-            "top_feature": result["top_feature"],
-            "confidence": abs(round(result["anomaly_score"], 4)),
+            "risk_score": round(result["risk_score"], 1),
+            "severity": result["risk_level"],
+            "confidence": result["confidence"],
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
+
         
         # 3. Sign payload
         sign_transaction(ml_alert_payload, "AI_SYSTEM")
@@ -146,46 +152,54 @@ def run_ai_audit(db: Session, shop_id: str) -> dict:
         # 4. Simulate mining
         from app.services.blockchain.blockchain import blockchain
         blockchain.add_transaction(ml_alert_payload)
-        block = blockchain.mine_pending_transactions(simulate=True)
+        block = blockchain.mine_pending_transactions(db, simulate=True)
         
         try:
-            # 5. Persist securely within short txn block
-            with db.begin():
-                # Upsert RiskScore
-                existing_score = db.query(RiskScore).filter(RiskScore.shop_id == shop_id).first()
-                if existing_score:
-                    existing_score.risk_score = result["risk_score"]
-                    existing_score.risk_level = result["risk_level"]
-                    existing_score.calculated_at = datetime.now(timezone.utc)
-                else:
-                    new_score = RiskScore(
-                        shop_id=shop_id,
-                        risk_score=result["risk_score"],
-                        risk_level=result["risk_level"],
-                        calculated_at=datetime.now(timezone.utc)
-                    )
-                    db.add(new_score)
-                    
-                # Insert Anomaly (WITHOUT block_hash/index yet)
-                existing_anomaly = db.query(Anomaly).filter(
-                    Anomaly.shop_id == shop_id,
-                    Anomaly.is_resolved == False
-                ).first()
+            # 5. Persist RiskScore and Anomaly
+            current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+            # Upsert RiskScore
+            existing_score = db.query(RiskScore).filter(RiskScore.shop_id == shop_id).first()
+            if existing_score:
+                existing_score.risk_score = result["risk_score"]
+                existing_score.risk_level = result["risk_level"]
+                existing_score.fraud_type = result.get("top_feature", "unknown")
+                existing_score.confidence = result["confidence"]
+                existing_score.month = current_month
+                existing_score.calculated_at = datetime.now(timezone.utc)
+            else:
+                new_score = RiskScore(
+                    shop_id=shop_id,
+                    risk_score=result["risk_score"],
+                    risk_level=result["risk_level"],
+                    fraud_type=result.get("top_feature", "unknown"),
+                    confidence=result["confidence"],
+                    month=current_month,
+                    calculated_at=datetime.now(timezone.utc)
+                )
+                db.add(new_score)
                 
-                if not existing_anomaly:
-                    anomaly = Anomaly(
-                        shop_id=shop_id,
-                        anomaly_type=result["top_feature"] or "unknown_ml_anomaly",
-                        severity=result["risk_level"].lower(),
-                        description=f"AI Audit flagged shop with risk score {result['risk_score']:.2f}",
-                        confidence=abs(result["anomaly_score"]),
-                        is_resolved=False
-                    )
-                    db.add(anomaly)
-                    anomaly_created = True
+            # Insert Anomaly (WITHOUT block_hash/index yet)
+            existing_anomaly = db.query(Anomaly).filter(
+                Anomaly.shop_id == shop_id,
+                Anomaly.is_resolved == False
+            ).first()
+            
+            if not existing_anomaly:
+                anomaly = Anomaly(
+                    shop_id=shop_id,
+                    anomaly_type=result["top_feature"] or "unknown_ml_anomaly",
+                    severity=result["risk_level"].lower(),
+                    description=f"AI Audit flagged shop with risk score {result['risk_score']:.2f}",
+                    confidence=abs(result["anomaly_score"]),
+                    is_resolved=False
+                )
+                db.add(anomaly)
+                anomaly_created = True
+                
+            db.commit()
 
             # DB Commit succeeds, now commit block
-            blockchain.commit_block(block)
+            blockchain.commit_block(db, block)
             
             # Now update anomaly with block reference
             if anomaly_created:
@@ -200,11 +214,16 @@ def run_ai_audit(db: Session, shop_id: str) -> dict:
                 db.commit()
 
                 # Add Governance Alert
+                _alert_sev_map = {
+                    "CRITICAL": AlertSeverity.CRITICAL,
+                    "HIGH": AlertSeverity.HIGH,
+                    "MEDIUM": AlertSeverity.MEDIUM,
+                }
                 shop = db.query(Shop).filter(Shop.id == shop_id).first()
                 if shop:
                     AlertService.create_alert(
                         db=db,
-                        severity=AlertSeverity[result["risk_level"]],
+                        severity=_alert_sev_map.get(result["risk_level"].upper(), AlertSeverity.INFO),
                         alert_type="ML_FRAUD",
                         district=shop.district,
                         entity_id=shop_id,
@@ -238,26 +257,39 @@ def run_ai_audit(db: Session, shop_id: str) -> dict:
             
     else:
         # LOW / MEDIUM risk
-        with db.begin():
+        try:
+            current_month = datetime.now(timezone.utc).strftime("%Y-%m")
             existing_score = db.query(RiskScore).filter(RiskScore.shop_id == shop_id).first()
             if existing_score:
                 existing_score.risk_score = result["risk_score"]
                 existing_score.risk_level = result["risk_level"]
+                existing_score.fraud_type = result.get("top_feature", "unknown")
+                existing_score.confidence = result["confidence"]
+                existing_score.month = current_month
                 existing_score.calculated_at = datetime.now(timezone.utc)
             else:
                 new_score = RiskScore(
                     shop_id=shop_id,
                     risk_score=result["risk_score"],
                     risk_level=result["risk_level"],
+                    fraud_type=result.get("top_feature", "unknown"),
+                    confidence=result["confidence"],
+                    month=current_month,
                     calculated_at=datetime.now(timezone.utc)
                 )
                 db.add(new_score)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise e
 
     return {
         "shop_id": shop_id,
         "risk_score": result["risk_score"],
         "risk_level": result["risk_level"],
-        "anomaly_created": anomaly_created
+        "confidence": result["confidence"],
+        "top_feature": result["top_feature"],
+        "status": "success"
     }
 
 
@@ -294,7 +326,7 @@ def _insert_anomaly(
     
     # Stage 1: Load payload and compute local simulated trace for database attachment
     blockchain.add_transaction(blockchain_payload)
-    block = blockchain.mine_pending_transactions(simulate=True)
+    block = blockchain.mine_pending_transactions(db, simulate=True)
     
     try:
         # We assume _insert_anomaly caller envelops the outer commit transaction
@@ -332,7 +364,7 @@ def _insert_anomaly(
                 anomaly_id=anomaly.id
             )
 
-        blockchain.commit_block(block) # Stage 2: Finalize upon DB success bounds globally
+        blockchain.commit_block(db, block) # Stage 2: Finalize upon DB success bounds globally
         
     except Exception as e:
         logger.error(f"Blockchain integrity conflict logging anomaly: {e}")

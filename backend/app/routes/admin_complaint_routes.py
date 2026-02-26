@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import asyncio
 import uuid
 
@@ -105,7 +105,7 @@ def assign_complaint(
     notes_list.append({
         "id": str(uuid.uuid4()),
         "note": f"Assigned to {request_data.inspector_id}",
-        "timestamp": datetime.utcnow().isoformat() + "Z"
+        "timestamp": datetime.now(timezone.utc).isoformat() + "Z"
     })
     complaint.notes = notes_list
 
@@ -175,7 +175,7 @@ def escalate_complaint(
     notes_list.append({
         "id": str(uuid.uuid4()),
         "note": f"Escalated: {request_data.reason}",
-        "timestamp": datetime.utcnow().isoformat() + "Z"
+        "timestamp": datetime.now(timezone.utc).isoformat() + "Z"
     })
     complaint.notes = notes_list
     

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, Any, Dict, List
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 class CitizenLoginRequest(BaseModel):
     ration_card: str
@@ -26,10 +26,17 @@ class CitizenTransactionItem(BaseModel):
     timestamp: datetime
     block_index: int
 
+class LifetimeDistributionSummary(BaseModel):
+    total_wheat_received: float
+    total_rice_received: float
+    total_sugar_received: float
+    total_complaints_filed: int
+    total_shortfalls_detected: int
 
 class CitizenTransactionsResponse(BaseModel):
     transactions: List[CitizenTransactionItem]
     total: int
+    summary: LifetimeDistributionSummary
 
 class EntitlementResponse(BaseModel):
     month_year: str
@@ -51,12 +58,15 @@ class EntitlementResponse(BaseModel):
     recent_activity: List[Dict[str, Any]] = []
 
 class ShopDetailsResponse(BaseModel):
+    id: Optional[str] = None
     name: str
     dealer_name: Optional[str] = "N/A"
     address: Optional[str] = "N/A"
     timings: str
     rating: float
     risk_score: float
+    shop_status: str = "active"
+    dealer_status: Optional[str] = None
     shop_risk_level: str = "NORMAL"
     shop_warning: Optional[str] = None
     active_grievances: int = 0
@@ -90,6 +100,7 @@ class NotificationResponse(BaseModel):
     severity: str
     read: bool
     created_at: datetime
+    payload: Optional[Dict[str, Any]] = None
 
 class FamilyMemberResponse(BaseModel):
     id: int
@@ -97,12 +108,21 @@ class FamilyMemberResponse(BaseModel):
     relation: str
     age: int
     aadhaar_masked: str
+    is_verified: bool
 
 class FamilyMemberCreateRequest(BaseModel):
     name: str
     relation: str
     age: int
     aadhaar_masked: str
+
+    @field_validator("name", "relation")
+    @classmethod
+    def validate_non_empty(cls, value: str) -> str:
+        cleaned = (value or "").strip()
+        if not cleaned:
+            raise ValueError("must not be empty")
+        return cleaned
 
 class NearbyShopResponse(BaseModel):
     id: str

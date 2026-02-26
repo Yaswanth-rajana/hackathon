@@ -15,6 +15,10 @@ class Settings:
     
     @property
     def DATABASE_URL(self) -> str:
+        explicit_db_url = os.getenv("DATABASE_URL")
+        if explicit_db_url:
+            return explicit_db_url
+
         if self.POSTGRES_PASSWORD:
             return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         return f"postgresql://{self.POSTGRES_USER}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"

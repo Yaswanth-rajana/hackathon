@@ -7,6 +7,8 @@ import ProtectedRoute from "./routes/ProtectedRoute";
 import CitizenProtectedRoute from "./routes/CitizenProtectedRoute";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Alert from "./components/common/Alert";
+import { Toaster } from "react-hot-toast";
+
 
 // Lazy Loaded Layout & Pages
 const AdminLayout = lazy(() => import("./layouts/AdminLayout"));
@@ -21,11 +23,18 @@ const ForecastPage = lazy(() => import("./pages/admin/ForecastPage"));
 const DealersPage = lazy(() => import("./pages/admin/DealersPage"));
 const ExplorerPage = lazy(() => import("./pages/admin/ExplorerPage"));
 const SimulationPage = lazy(() => import("./pages/admin/SimulationPage"));
+const LiveMonitorPage = lazy(() => import("./pages/admin/LiveMonitorPage"));
 const SettingsPage = lazy(() => import("./pages/admin/SettingsPage"));
 const AlertsPage = lazy(() => import("./pages/admin/AlertsPage"));
 const InspectionsPage = lazy(() => import("./pages/admin/governance/InspectionsPage"));
 
+// Intelligence Pages
+const AIRiskAnalysisPage = lazy(() => import("./pages/admin/intelligence/AIRiskAnalysisPage"));
+const FraudDetectionInsightsPage = lazy(() => import("./pages/admin/intelligence/FraudDetectionInsightsPage"));
+const PredictiveTrendsPage = lazy(() => import("./pages/admin/intelligence/PredictiveTrendsPage"));
+
 const CitizenDashboard = lazy(() => import("./pages/CitizenDashboard"));
+
 const UpdateMobilePage = lazy(() => import("./pages/citizen/UpdateMobilePage"));
 const UpdatePinPage = lazy(() => import("./pages/citizen/UpdatePinPage"));
 
@@ -33,7 +42,9 @@ function App() {
   return (
     <>
       <Alert />
+      <Toaster position="top-right" reverseOrder={false} />
       <Routes>
+
         <Route path="/login" element={<DealerLogin />} />
         <Route path="/dealer/login" element={<Navigate to="/login" replace />} />
 
@@ -198,7 +209,39 @@ function App() {
               </React.Suspense>
             </ErrorBoundary>
           } />
+          <Route path="live-monitor" element={
+            <ErrorBoundary>
+              <React.Suspense fallback={<div>Loading Live Monitor...</div>}>
+                <LiveMonitorPage />
+              </React.Suspense>
+            </ErrorBoundary>
+          } />
+
+          {/* Intelligence Tab Routes */}
+          <Route path="intelligence/risk-analysis" element={
+            <ErrorBoundary>
+              <React.Suspense fallback={<div>Loading AI Analysis...</div>}>
+                <AIRiskAnalysisPage />
+              </React.Suspense>
+            </ErrorBoundary>
+          } />
+          <Route path="intelligence/fraud-insights" element={
+            <ErrorBoundary>
+              <React.Suspense fallback={<div>Loading Insights...</div>}>
+                <FraudDetectionInsightsPage />
+              </React.Suspense>
+            </ErrorBoundary>
+          } />
+          <Route path="intelligence/predictive-trends" element={
+            <ErrorBoundary>
+              <React.Suspense fallback={<div>Loading Trends...</div>}>
+                <PredictiveTrendsPage />
+              </React.Suspense>
+            </ErrorBoundary>
+          } />
+
           <Route path="system/config" element={
+
             <ErrorBoundary>
               <React.Suspense fallback={<div>Loading Settings...</div>}>
                 <SettingsPage />

@@ -1,5 +1,5 @@
 from sqlalchemy import Column, String, Integer, Boolean, DateTime
-from datetime import datetime
+from sqlalchemy.sql import func
 from app.database import Base
 
 
@@ -20,8 +20,8 @@ class Beneficiary(Base):
     password_hash = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True)
     failed_attempts = Column(Integer, default=0)
-    last_login = Column(DateTime, nullable=True)
-    lockout_until = Column(DateTime, nullable=True)
+    last_login = Column(DateTime(timezone=True), nullable=True)
+    lockout_until = Column(DateTime(timezone=True), nullable=True)
     
     district = Column(String(50), nullable=True)
     mandal = Column(String(50), nullable=True)
@@ -30,5 +30,5 @@ class Beneficiary(Base):
     
     is_simulated = Column(Boolean, nullable=False, default=False, index=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

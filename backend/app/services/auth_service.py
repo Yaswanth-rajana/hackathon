@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 from app.models.user import User, UserRole
 from app.models.beneficiary import Beneficiary
@@ -24,14 +24,14 @@ def authenticate_citizen(db: Session, ration_card: str, password: str) -> Tuple[
         )
 
     # Check lock out
-    if beneficiary.lockout_until and beneficiary.lockout_until > datetime.utcnow():
+    if beneficiary.lockout_until and beneficiary.lockout_until > datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account locked due to too many failed attempts. Try again later."
         )
 
     # If lockout expired, reset
-    if beneficiary.lockout_until and beneficiary.lockout_until <= datetime.utcnow():
+    if beneficiary.lockout_until and beneficiary.lockout_until <= datetime.now(timezone.utc):
         beneficiary.failed_attempts = 0
         beneficiary.lockout_until = None
         db.commit()
@@ -39,7 +39,7 @@ def authenticate_citizen(db: Session, ration_card: str, password: str) -> Tuple[
     if not beneficiary.password_hash or not verify_password(password, beneficiary.password_hash):
         beneficiary.failed_attempts += 1
         if beneficiary.failed_attempts >= 5:
-            beneficiary.lockout_until = datetime.utcnow() + timedelta(minutes=30)
+            beneficiary.lockout_until = datetime.now(timezone.utc) + timedelta(minutes=30)
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -52,7 +52,7 @@ def authenticate_citizen(db: Session, ration_card: str, password: str) -> Tuple[
     # Success: reset attempts
     beneficiary.failed_attempts = 0
     beneficiary.lockout_until = None
-    beneficiary.last_login = datetime.utcnow()
+    beneficiary.last_login = datetime.now(timezone.utc)
     db.commit()
 
     # Expires in 1 hour
@@ -118,7 +118,7 @@ def authenticate_dealer(db: Session, login_data: UserLogin) -> Tuple[Token, str]
         )
 
     # Update last login
-    user.last_login = datetime.now()
+    user.last_login = datetime.now(timezone.utc)
     db.commit()
 
     # Generate Token
@@ -166,7 +166,7 @@ def authenticate_user(db: Session, login_data: UserLogin) -> Tuple[Token, str]:
             detail="Dealer account is suspended or expired. Contact admin."
         )
 
-    user.last_login = datetime.now()
+    user.last_login = datetime.now(timezone.utc)
     db.commit()
 
     access_token = create_access_token(

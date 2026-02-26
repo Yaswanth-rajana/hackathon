@@ -31,15 +31,12 @@ def get_citizen_profile(db: Session, beneficiary: Beneficiary) -> dict:
     }
 
 
-def get_citizen_transactions(db: Session, beneficiary: Beneficiary) -> dict:
+def get_citizen_transactions(db: Session, beneficiary: Beneficiary, limit: int = 10) -> dict:
     """Return transactions linked to the citizen's ration card."""
-    rows = (
-        db.query(Transaction)
-        .filter(Transaction.ration_card == beneficiary.ration_card)
-        .order_by(Transaction.timestamp.desc())
-        .limit(10)
-        .all()
-    )
+    base_query = db.query(Transaction).filter(Transaction.ration_card == beneficiary.ration_card)
+    total = base_query.count()
+
+    rows = base_query.order_by(Transaction.timestamp.desc()).limit(limit).all()
 
     items = [
         {
@@ -51,11 +48,45 @@ def get_citizen_transactions(db: Session, beneficiary: Beneficiary) -> dict:
         for t in rows
     ]
 
-    return {"transactions": items, "total": len(items)}
+    summary_rows = db.query(
+        Transaction.transaction_type,
+        Transaction.items,
+        Transaction.notes
+    ).filter(Transaction.ration_card == beneficiary.ration_card).all()
+
+    total_wheat = 0.0
+    total_rice = 0.0
+    total_sugar = 0.0
+    shortfalls = 0
+
+    for tx_type, tx_items, notes in summary_rows:
+        if tx_type == "DISTRIBUTION":
+            if isinstance(tx_items, dict):
+                total_wheat += float(tx_items.get("wheat", 0) or 0)
+                total_rice += float(tx_items.get("rice", 0) or 0)
+                total_sugar += float(tx_items.get("sugar", 0) or 0)
+            if isinstance(notes, str) and notes.strip():
+                shortfalls += 1
+
+    complaints_count = db.query(func.count(Complaint.id)).filter(
+        Complaint.ration_card == beneficiary.ration_card
+    ).scalar() or 0
+
+    return {
+        "transactions": items,
+        "total": total,
+        "summary": {
+            "total_wheat_received": round(total_wheat, 2),
+            "total_rice_received": round(total_rice, 2),
+            "total_sugar_received": round(total_sugar, 2),
+            "total_complaints_filed": int(complaints_count),
+            "total_shortfalls_detected": shortfalls
+        }
+    }
 
 
 def get_citizen_entitlement(db: Session, beneficiary: Beneficiary) -> dict:
-    current_month_year = datetime.utcnow().strftime("%Y-%m")
+    current_month_year = datetime.now(timezone.utc).strftime("%Y-%m")
     
     entitlement = db.query(Entitlement).filter(
         Entitlement.ration_card == beneficiary.ration_card,
@@ -67,7 +98,7 @@ def get_citizen_entitlement(db: Session, beneficiary: Beneficiary) -> dict:
     sugar_total = entitlement.sugar if entitlement else 0.0
 
     # Calculate received amounts from transactions in the current month
-    start_of_month = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    start_of_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
     transactions = db.query(Transaction).filter(
         Transaction.ration_card == beneficiary.ration_card,
@@ -150,7 +181,7 @@ def get_citizen_entitlement(db: Session, beneficiary: Beneficiary) -> dict:
     
     if shop:
         # 1. Count short distributions for this shop in last 30 days
-        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+        thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
         short_count = db.query(func.count(Transaction.id)).filter(
             Transaction.shop_id == shop.id,
             Transaction.transaction_type == "DISTRIBUTION",
@@ -200,7 +231,7 @@ def get_citizen_shop(db: Session, beneficiary: Beneficiary) -> dict:
     shop_warning = None
     
     # 1. Count short distributions for this shop in last 30 days
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     short_count = db.query(func.count(Transaction.id)).filter(
         Transaction.shop_id == shop.id,
         Transaction.transaction_type == "DISTRIBUTION",
@@ -212,9 +243,13 @@ def get_citizen_shop(db: Session, beneficiary: Beneficiary) -> dict:
         shop_risk_level = "ELEVATED"
         shop_warning = "This shop has recorded multiple short distributions. You may file a complaint."
     
-    if shop.risk_score >= 0.7:
+    if shop.risk_score >= 70:
         shop_risk_level = "HIGH"
         shop_warning = "High risk detected for this shop. Government audit in progress."
+
+    if (shop.status or "").lower() == "under_review":
+        shop_risk_level = "HIGH"
+        shop_warning = shop.under_review_reason or "Red Flag: shop is under investigation."
 
     # Grievance Count Logic
     active_grievances = db.query(func.count(Complaint.id)).filter(
@@ -229,12 +264,15 @@ def get_citizen_shop(db: Session, beneficiary: Beneficiary) -> dict:
         shop_warning = shop_warning or f"Active Grievances: {active_grievances} reported by citizens."
 
     return {
+        "id": shop.id,
         "name": shop.name,
         "dealer_name": dealer.name if dealer else "N/A",
         "address": shop.address or "N/A",
         "timings": shop.timings or "09:00 AM - 05:00 PM",
         "rating": shop.rating or 4.5,
         "risk_score": shop.risk_score or 0.0,
+        "shop_status": (shop.status or "active").lower(),
+        "dealer_status": (dealer.dealer_status if dealer else None),
         "shop_risk_level": shop_risk_level,
         "shop_warning": shop_warning,
         "active_grievances": active_grievances
@@ -248,7 +286,7 @@ def file_complaint(db: Session, beneficiary: Beneficiary, request: ComplaintCrea
         raise HTTPException(status_code=400, detail="Description must be at least 10 characters long.")
 
     # 2. Refined Spam Prevention (Same category/shop/citizen within 5 mins)
-    five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
+    five_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
     existing_spam = db.query(Complaint).filter(
         Complaint.ration_card == beneficiary.ration_card,
         Complaint.shop_id == (request.shop_id or beneficiary.shop_id),
@@ -263,7 +301,7 @@ def file_complaint(db: Session, beneficiary: Beneficiary, request: ComplaintCrea
         )
 
     # 3. Rate Limiting (Daily)
-    start_of_day = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    start_of_day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     today_complaints = db.query(func.count(Complaint.id)).filter(
         Complaint.ration_card == beneficiary.ration_card,
         Complaint.created_at >= start_of_day
@@ -353,12 +391,30 @@ def get_citizen_complaints(db: Session, beneficiary: Beneficiary) -> list:
 
 def get_citizen_notifications(db: Session, beneficiary: Beneficiary) -> list:
     # Notifications meant for this user's district or global
-    notifications = db.query(Notification).filter(
+    rows = db.query(Notification).filter(
         (Notification.district == beneficiary.district) | (Notification.district.is_(None))
-    ).order_by(Notification.created_at.desc()).limit(20).all()
-    # Mask read state as we might need a separate read table per user in a real system.
-    # For now, just return them.
-    return [n.__dict__ for n in notifications]
+    ).order_by(Notification.created_at.desc()).limit(50).all()
+
+    filtered = []
+    for n in rows:
+        payload = n.payload if isinstance(n.payload, dict) else {}
+
+        # Distribution receipts are user-specific. Keep only this citizen's records.
+        if n.type == "DISTRIBUTION_RECEIPT":
+            if payload.get("ration_card") != beneficiary.ration_card:
+                continue
+
+        filtered.append({
+            "id": n.id,
+            "type": n.type,
+            "message": n.message,
+            "severity": n.severity,
+            "read": n.read,
+            "created_at": n.created_at,
+            "payload": payload
+        })
+
+    return filtered[:20]
 
 
 def get_citizen_family(db: Session, beneficiary: Beneficiary) -> list:
@@ -384,7 +440,8 @@ def add_family_member(db: Session, beneficiary: Beneficiary, data: FamilyMemberC
         name=data.name,
         relation=data.relation,
         age=data.age,
-        aadhaar_masked=data.aadhaar_masked
+        aadhaar_masked=data.aadhaar_masked,
+        is_verified=True
     )
     db.add(new_member)
     db.commit()

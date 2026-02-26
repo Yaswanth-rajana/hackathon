@@ -35,7 +35,7 @@ export default function FamilyMembersPanel() {
                 ...formData,
                 age: parseInt(formData.age, 10)
             });
-            showAlert("Family member added. Verification pending.", "success");
+            showAlert("Family member added successfully.", "success");
             setShowForm(false);
             setFormData({ name: '', aadhaar_masked: '', relation: '', age: '' });
             fetchMembers();
@@ -44,6 +44,16 @@ export default function FamilyMembersPanel() {
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const getMemberStatus = (member) => {
+        if (member?.is_verified === true) {
+            return { label: 'Verified', className: 'bg-green-100 text-green-800' };
+        }
+        if (member?.is_verified === false) {
+            return { label: 'Pending', className: 'bg-yellow-100 text-yellow-800' };
+        }
+        return { label: 'Linked', className: 'bg-blue-100 text-blue-800' };
     };
 
     const handleDelete = async (id) => {
@@ -71,7 +81,7 @@ export default function FamilyMembersPanel() {
                 </div>
                 <button
                     onClick={() => setShowForm(!showForm)}
-                    disabled={members.length >= 6}
+                    disabled={members.length >= 8}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded font-bold text-xs uppercase tracking-wider transition-colors disabled:opacity-50"
                 >
                     {showForm ? 'Cancel' : <><UserPlus className="w-4 h-4" /> Add</>}
@@ -111,6 +121,7 @@ export default function FamilyMembersPanel() {
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Relation</label>
                             <select
+                                required
                                 value={formData.relation}
                                 onChange={e => setFormData({ ...formData, relation: e.target.value })}
                                 className="w-full text-sm border-gray-300 rounded focus:ring-emerald-500 focus:border-emerald-500 p-2 border bg-white"
@@ -148,7 +159,7 @@ export default function FamilyMembersPanel() {
                     >
                         {isSubmitting ? 'Submitting...' : 'Link Family Member'}
                     </button>
-                    <p className="mt-2 text-[10px] text-gray-500 text-center uppercase tracking-widest leading-none">Adding a member requires biometric verification at the FPS.</p>
+                    <p className="mt-2 text-[10px] text-gray-500 text-center uppercase tracking-widest leading-none">You can link up to 8 family members per ration card.</p>
                 </form>
             )}
 
@@ -163,13 +174,14 @@ export default function FamilyMembersPanel() {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                    {members.map(member => (
+                    {members.map((member) => {
+                        const status = getMemberStatus(member);
+                        return (
                         <div key={member.id} className="p-3 border border-gray-100 rounded bg-white shadow-sm flex flex-col justify-between group">
                             <div className="flex justify-between items-start mb-2">
                                 <h4 className="font-bold text-gray-900 leading-tight">{member.name}</h4>
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest shrink-0 ${member.is_verified ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                                    }`}>
-                                    {member.is_verified ? 'Verified' : 'Pending'}
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest shrink-0 ${status.className}`}>
+                                    {status.label}
                                 </span>
                             </div>
                             <div className="space-y-1 mb-3">
@@ -186,7 +198,8 @@ export default function FamilyMembersPanel() {
                                 </button>
                             </div>
                         </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
         </div>

@@ -12,11 +12,12 @@ from app.models.idempotency import IdempotencyKey
 from app.models.activity_log import ActivityLog
 from app.services import blockchain_service
 from app.services import risk_service
+from app.models.enums import TransactionType
 from app.services.dealer_entitlement_service import get_current_entitlement, get_already_received, check_cash_transfer_exists
 from app.services.event_emitter import manager
 from app.services.blockchain.blockchain import blockchain
 from app.services.blockchain.crypto import sign_transaction
-from app.services.notification_service import notify_citizen
+from app.services.notification_service import notify_citizen, create_distribution_notification
 import hashlib
 
 logger = logging.getLogger(__name__)
@@ -116,7 +117,7 @@ def distribute_ration(db: Session, dealer: User, request_data: dict, idempotency
     # Step 11: Execute Transaction
     try:
         transaction_id = f"txn-{uuid.uuid4().hex[:12]}"
-        transaction_type = "CASH_TRANSFER" if is_cash else "DISTRIBUTION"
+        transaction_type = TransactionType.CASH_TRANSFER if is_cash else TransactionType.DISTRIBUTION
         
         # Deduct Stock
         if not is_cash:
@@ -188,21 +189,50 @@ def distribute_ration(db: Session, dealer: User, request_data: dict, idempotency
         except: pass
 
         import asyncio
+        ws_payload = {
+            "type": "new_transaction",
+            "shop_id": dealer.shop_id,
+            "transaction_id": transaction_id,
+            "block_index": block.index
+        }
         try:
-            asyncio.create_task(manager.broadcast_to_district(dealer.district or "GENERAL", {
-                "type": "new_transaction",
-                "shop_id": dealer.shop_id,
-                "transaction_id": transaction_id,
-                "block_index": block.index
-            }))
-        except: pass
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                loop.create_task(manager.broadcast_to_district(dealer.district or "GENERAL", ws_payload))
+            else:
+                asyncio.run(manager.broadcast_to_district(dealer.district or "GENERAL", ws_payload))
+        except Exception as e:
+            logger.error(f"WebSocket broadcast failed: {e}")
         
         # SMS Notification
+        sms_status = "not_attempted"
         try:
             if beneficiary.mobile_verified and beneficiary.mobile:
-                notify_citizen(txn, beneficiary, block.index)
+                sms_status = notify_citizen(txn, beneficiary, block.index)
+            else:
+                sms_status = "skipped_no_mobile"
         except Exception as e:
             logger.error(f"SMS failure: {e}")
+            sms_status = "failed"
+
+        # In-app notification (auditable and independent of SMS provider)
+        try:
+            shortfall = notes.strip() if notes and notes.strip() else None
+            create_distribution_notification(
+                db=db,
+                beneficiary=beneficiary,
+                items=txn.items or {},
+                txn_id=transaction_id,
+                block_index=block.index,
+                shortfall=shortfall,
+                status=sms_status or "unknown"
+            )
+        except Exception as e:
+            logger.error(f"Failed to create distribution notification: {e}")
             
         return response
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { getRiskLevel } from '../../../utils/severityMapper';
 
 const HighRiskShopsTable = ({ shops, loading, error, onExport, page, setPage }) => {
+    const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
     if (error) {
         return (
             <div className="bg-white p-6 rounded-lg border border-red-200 text-red-700 text-sm font-medium">
@@ -75,9 +76,40 @@ const HighRiskShopsTable = ({ shops, loading, error, onExport, page, setPage }) 
                                             </span>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <span className="text-gray-700 capitalize text-xs bg-gray-100 px-2 py-1 rounded border border-gray-200 inline-block truncate max-w-[150px]" title={shop.fraud_type?.replace(/_/g, ' ')}>
-                                                {shop.fraud_type ? shop.fraud_type.replace(/_/g, ' ') : 'Multiple Flags'}
-                                            </span>
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-gray-700 capitalize text-xs bg-gray-100 px-2 py-1 rounded border border-gray-200 inline-block truncate max-w-[150px]" title={shop.fraud_type?.replace(/_/g, ' ')}>
+                                                    {shop.fraud_type ? shop.fraud_type.replace(/_/g, ' ') : 'Multiple Flags'}
+                                                </span>
+                                                {(shop.shop_status || '').toLowerCase() === 'under_review' && (
+                                                    <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded bg-red-50 text-red-700 border border-red-200 inline-block">
+                                                        Red Flag: Under Review
+                                                    </span>
+                                                )}
+                                                {(shop.dealer_status || '').toLowerCase() === 'suspended' && (
+                                                    <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded bg-amber-50 text-amber-700 border border-amber-200 inline-block">
+                                                        Dealer Suspended
+                                                    </span>
+                                                )}
+                                                {shop.public_proof_id && (
+                                                    <div className="flex flex-col gap-1">
+                                                        <button
+                                                            onClick={() => window.open(`${apiBase}/proof/${shop.public_proof_id}`, '_blank')}
+                                                            className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200 inline-block text-left hover:bg-blue-100"
+                                                        >
+                                                            View Public Proof
+                                                        </button>
+                                                        <div className="text-[10px] text-blue-800 bg-blue-50 border border-blue-100 rounded px-2 py-1 break-all">
+                                                            {`${apiBase}/proof/${shop.public_proof_id}`}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => navigator.clipboard?.writeText(`${apiBase}/proof/${shop.public_proof_id}`)}
+                                                            className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded bg-white text-blue-700 border border-blue-200 hover:bg-blue-50 text-left"
+                                                        >
+                                                            Copy Proof URL
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-4 py-3">
                                             {shop.last_audit ? (

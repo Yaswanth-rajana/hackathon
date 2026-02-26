@@ -24,7 +24,7 @@ def inject_ghosts(
         return SimulationService.inject_ghost_beneficiaries(
             db=db,
             shop_id=shop_id,
-            count=payload.count,
+            intensity=payload.intensity,
             seed=payload.seed
         )
     except ValueError as e:
@@ -44,7 +44,7 @@ def inject_mismatch(
         return SimulationService.inject_stock_mismatch(
             db=db,
             shop_id=shop_id,
-            inflation_factor=payload.inflation_factor,
+            intensity=payload.intensity,
             month_year=payload.month_year
         )
     except ValueError as e:
@@ -64,7 +64,7 @@ def inject_complaints(
         return SimulationService.inject_complaint_spike(
             db=db,
             shop_id=shop_id,
-            count=payload.count,
+            intensity=payload.intensity,
             seed=payload.seed
         )
     except ValueError as e:

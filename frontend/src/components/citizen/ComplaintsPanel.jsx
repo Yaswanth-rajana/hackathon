@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { citizenActions } from '../../services/citizenApi';
 import { MessageSquareWarning, PlusCircle, CheckCircle, Scale, Clock, ShieldCheck, AlertCircle } from 'lucide-react';
 import { useAlert } from '../../context/AlertContext';
@@ -13,23 +13,26 @@ export default function ComplaintsPanel() {
         shop_id: '',
         severity: 'minor',
         is_anonymous: false,
-        attachment: null
+        attachment_url: null
     });
+    const [selectedAttachment, setSelectedAttachment] = useState(null);
     const [shopData, setShopData] = useState(null);
     const [lastSubmission, setLastSubmission] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const fileInputRef = useRef(null);
     const { showAlert } = useAlert();
 
     const fetchComplaints = async () => {
         setIsLoading(true);
         try {
-            const [complaintsData, shopInfo] = await Promise.all([
+            const [complaintsData, shopInfo, profile] = await Promise.all([
                 citizenActions.getComplaints(),
-                citizenActions.getShop()
+                citizenActions.getShop(),
+                citizenActions.getProfile()
             ]);
             setComplaints(complaintsData);
             setShopData(shopInfo);
-            setFormData(prev => ({ ...prev, shop_id: shopInfo.id || '' }));
+            setFormData(prev => ({ ...prev, shop_id: profile?.shop_id || '' }));
         } catch (err) {
             showAlert("Failed to load dashboard data", "error");
         } finally {
@@ -41,6 +44,27 @@ export default function ComplaintsPanel() {
         fetchComplaints();
     }, []);
 
+    const handleAttachmentChange = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const maxBytes = 5 * 1024 * 1024;
+        if (file.size > maxBytes) {
+            showAlert("File size exceeds 5MB limit.", "warning");
+            e.target.value = '';
+            return;
+        }
+
+        if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+            showAlert("Only image/video files are allowed.", "warning");
+            e.target.value = '';
+            return;
+        }
+
+        setSelectedAttachment(file);
+        setFormData(prev => ({ ...prev, attachment_url: null }));
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         const cleanDesc = formData.description.trim();
@@ -51,9 +75,16 @@ export default function ComplaintsPanel() {
 
         setIsSubmitting(true);
         try {
+            let attachmentUrl = formData.attachment_url || null;
+            if (selectedAttachment) {
+                const uploaded = await citizenActions.uploadComplaintAttachment(selectedAttachment);
+                attachmentUrl = uploaded?.url || null;
+            }
+
             const result = await citizenActions.fileComplaint({
                 ...formData,
-                description: cleanDesc
+                description: cleanDesc,
+                attachment_url: attachmentUrl
             });
             setLastSubmission(result);
             showAlert(`Grievance filed successfully. Recorded on-chain at Block #${result.block_index}`, "success");
@@ -61,11 +92,13 @@ export default function ComplaintsPanel() {
             setFormData({
                 complaint_type: 'quality',
                 description: '',
-                shop_id: shopData?.id || '',
+                shop_id: formData.shop_id || '',
                 severity: 'minor',
                 is_anonymous: false,
-                attachment: null
+                attachment_url: null
             });
+            setSelectedAttachment(null);
+            if (fileInputRef.current) fileInputRef.current.value = '';
             fetchComplaints();
         } catch (err) {
             showAlert(err.response?.data?.detail || "Failed to submit grievance", "error");
@@ -178,10 +211,12 @@ export default function ComplaintsPanel() {
 
                         <div className="space-y-2">
                             <label className="block text-[10px] font-black text-rose-900 mb-1 uppercase tracking-widest">Anonymous Mode</label>
-                            <div
-                                onClick={() => setFormData({ ...formData, is_anonymous: !formData.is_anonymous })}
-                                className={`flex items-center justify-between p-3 border rounded-xl cursor-pointer transition-all ${formData.is_anonymous ? 'bg-rose-50 border-rose-200' : 'bg-white border-rose-100'
+                            <button
+                                type="button"
+                                onClick={() => setFormData(prev => ({ ...prev, is_anonymous: !prev.is_anonymous }))}
+                                className={`w-full flex items-center justify-between p-3 border rounded-xl cursor-pointer transition-all ${formData.is_anonymous ? 'bg-rose-50 border-rose-200' : 'bg-white border-rose-100'
                                     }`}
+                                aria-pressed={formData.is_anonymous}
                             >
                                 <span className={`text-[10px] font-bold ${formData.is_anonymous ? 'text-rose-900' : 'text-gray-400'}`}>
                                     {formData.is_anonymous ? 'Identity Shielded' : 'Identity Shared'}
@@ -189,7 +224,7 @@ export default function ComplaintsPanel() {
                                 <div className={`w-8 h-4 rounded-full relative transition-colors ${formData.is_anonymous ? 'bg-rose-600' : 'bg-gray-200'}`}>
                                     <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${formData.is_anonymous ? 'left-4.5' : 'left-0.5'}`} />
                                 </div>
-                            </div>
+                            </button>
                         </div>
 
                         <div className="md:col-span-2 space-y-2">
@@ -206,15 +241,28 @@ export default function ComplaintsPanel() {
 
                         <div className="md:col-span-2">
                             <label className="block text-[10px] font-black text-rose-900 mb-1 uppercase tracking-widest">Attach Evidence (Optional)</label>
-                            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-rose-100 border-dashed rounded-xl hover:bg-rose-50/30 transition-colors cursor-pointer group">
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*,video/*"
+                                className="hidden"
+                                onChange={handleAttachmentChange}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="mt-1 w-full flex justify-center px-6 pt-5 pb-6 border-2 border-rose-100 border-dashed rounded-xl hover:bg-rose-50/30 transition-colors cursor-pointer group"
+                            >
                                 <div className="space-y-1 text-center">
                                     <PlusCircle className="mx-auto h-8 w-8 text-rose-300 group-hover:text-rose-500 transition-colors" />
                                     <div className="flex text-[10px] text-rose-600 font-bold uppercase tracking-widest">
-                                        <span>Upload Image/Video</span>
+                                        <span>{selectedAttachment ? 'Change File' : 'Upload Image/Video'}</span>
                                     </div>
-                                    <p className="text-[9px] text-rose-400">Max size 5MB (Mock Only)</p>
+                                    <p className="text-[9px] text-rose-400">
+                                        {selectedAttachment ? `${selectedAttachment.name} (${Math.ceil(selectedAttachment.size / 1024)} KB)` : 'Max size 5MB'}
+                                    </p>
                                 </div>
-                            </div>
+                            </button>
                         </div>
                     </div>
 

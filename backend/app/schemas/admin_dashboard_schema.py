@@ -37,6 +37,9 @@ class HighRiskShopResponse(BaseModel):
     risk_score: int
     fraud_type: Optional[str] = None
     last_audit: Optional[str] = None
+    shop_status: Optional[str] = None
+    dealer_status: Optional[str] = None
+    public_proof_id: Optional[str] = None
 
 class HighRiskShopsPaginatedResponse(BaseModel):
     data: List[HighRiskShopResponse]

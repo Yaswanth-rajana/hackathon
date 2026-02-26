@@ -29,6 +29,18 @@ def run_migration():
         conn.execute(text("ALTER TABLE anomalies ADD COLUMN IF NOT EXISTS is_simulated BOOLEAN DEFAULT FALSE;"))
         conn.execute(text("UPDATE anomalies SET is_simulated = FALSE WHERE is_simulated IS NULL;"))
         conn.execute(text("ALTER TABLE anomalies ALTER COLUMN is_simulated SET NOT NULL;"))
+
+        # Shops: autonomous governance state
+        print("Migrating shops table...")
+        conn.execute(text("ALTER TABLE shops ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'active';"))
+        conn.execute(text("ALTER TABLE shops ADD COLUMN IF NOT EXISTS under_review_reason TEXT;"))
+        conn.execute(text("UPDATE shops SET status = 'active' WHERE status IS NULL;"))
+
+        # Family members: explicit verification state for UI/API contract
+        print("Migrating family_members table...")
+        conn.execute(text("ALTER TABLE family_members ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT TRUE;"))
+        conn.execute(text("UPDATE family_members SET is_verified = TRUE WHERE is_verified IS NULL;"))
+        conn.execute(text("ALTER TABLE family_members ALTER COLUMN is_verified SET NOT NULL;"))
         
         # Indexes
         print("Creating simulation optimization indexes...")
@@ -39,6 +51,7 @@ def run_migration():
         # Individual indexes for complaints and anomalies if needed
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_complaints_simulated ON complaints(is_simulated);"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_anomalies_simulated ON anomalies(is_simulated);"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_shops_status ON shops(status);"))
         
         print("Phase 1 Migration Complete ✅")
 

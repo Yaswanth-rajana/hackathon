@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime
+from datetime import datetime, timezone
 from app.models.entitlement import Entitlement
 from app.models.transaction import Transaction
 from app.models.beneficiary import Beneficiary
@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 def get_current_entitlement(db: Session, ration_card: str, current_month: str = None) -> Entitlement:
     if not current_month:
-        current_month = datetime.utcnow().strftime("%Y-%m")
+        current_month = datetime.now(timezone.utc).strftime("%Y-%m")
         
     entitlement = db.query(Entitlement).filter(
         Entitlement.ration_card == ration_card,
@@ -24,10 +24,10 @@ def get_current_entitlement(db: Session, ration_card: str, current_month: str = 
 
 def get_already_received(db: Session, ration_card: str, current_month: str = None) -> dict:
     if not current_month:
-        current_month = datetime.utcnow().strftime("%Y-%m")
+        current_month = datetime.now(timezone.utc).strftime("%Y-%m")
         
     # Transaction timestamp is used to filter by current month
-    start_date = datetime.strptime(f"{current_month}-01", "%Y-%m-%d")
+    start_date = datetime.strptime(f"{current_month}-01", "%Y-%m-%d").replace(tzinfo=timezone.utc)
     
     # Calculate sum of items from JSONB
     result = db.query(
@@ -47,9 +47,9 @@ def get_already_received(db: Session, ration_card: str, current_month: str = Non
     }
 def check_cash_transfer_exists(db: Session, ration_card: str, current_month: str = None) -> bool:
     if not current_month:
-        current_month = datetime.utcnow().strftime("%Y-%m")
+        current_month = datetime.now(timezone.utc).strftime("%Y-%m")
         
-    start_date = datetime.strptime(f"{current_month}-01", "%Y-%m-%d")
+    start_date = datetime.strptime(f"{current_month}-01", "%Y-%m-%d").replace(tzinfo=timezone.utc)
     
     exists = db.query(Transaction).filter(
         Transaction.ration_card == ration_card,

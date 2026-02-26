@@ -151,6 +151,7 @@ export default function CitizenDashboard() {
                     {/* History Tab */}
                     <div className={`col-span-1 md:col-span-3 space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500 ${isVisible('history')}`}>
                         <TransactionsList />
+                        <NotificationsPanel />
                     </div>
 
                     {/* Support Tab */}

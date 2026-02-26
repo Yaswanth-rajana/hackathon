@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean
 from app.database import Base
 
 class FamilyMember(Base):
@@ -10,3 +10,4 @@ class FamilyMember(Base):
     relation = Column(String(50), nullable=False)
     age = Column(Integer, nullable=False)
     aadhaar_masked = Column(String(14), nullable=False)  # Example: "XXXX-XXXX-1234"
+    is_verified = Column(Boolean, nullable=False, default=True)

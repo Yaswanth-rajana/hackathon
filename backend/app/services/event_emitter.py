@@ -36,7 +36,7 @@ class ConnectionManager:
                 "district": district,
                 "entity_id": entity_id,
                 "entity_type": entity_type,
-                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "payload": payload or {}
             }
             # Only broadcast if there are connections

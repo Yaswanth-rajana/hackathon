@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, desc, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import cast
@@ -159,7 +159,7 @@ class AnalyticsService:
         """
         Top recurring anomalies and repeat offenders within a time window.
         """
-        time_window = datetime.utcnow() - timedelta(days=days)
+        time_window = datetime.now(timezone.utc) - timedelta(days=days)
         
         # 1. Top recurring anomalies
         anomaly_query = db.query(

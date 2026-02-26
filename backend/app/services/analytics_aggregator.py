@@ -2,7 +2,7 @@ import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models.monthly_analytics import MonthlyAnalytics
 from app.models.risk_score import RiskScore
@@ -15,7 +15,7 @@ class AnalyticsAggregator:
     @staticmethod
     def _get_month_str(dt: datetime = None) -> str:
         if not dt:
-            dt = datetime.now()
+            dt = datetime.now(timezone.utc)
         return dt.strftime('%Y-%m')
 
     @staticmethod

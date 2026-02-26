@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import asyncio
 import uuid
 
@@ -55,7 +55,7 @@ def schedule_audit(
         
     audit = Audit(
         shop_id=request_data.shop_id,
-        scheduled_date=datetime.fromisoformat(request_data.scheduled_date.replace("Z", "")),
+        scheduled_date=datetime.fromisoformat(request_data.scheduled_date.replace("Z", "")).replace(tzinfo=timezone.utc),
         priority=request_data.priority,
         notes=request_data.notes,
         created_by=current_user.id,
@@ -144,7 +144,7 @@ def complete_audit(
         
     audit.status = "completed"
     audit.findings = request_data.findings
-    audit.completed_date = datetime.utcnow()
+    audit.completed_date = datetime.now(timezone.utc)
     audit.auditor_id = current_user.id
     
     # Smart Risk Score update
@@ -161,7 +161,7 @@ def complete_audit(
         risk_score=new_score_val,
         fraud_type="audit_fraud" if found_fraud else "audit_clear",
         confidence=0.9,
-        month=datetime.utcnow().strftime("%Y-%m")
+        month=datetime.now(timezone.utc).strftime("%Y-%m")
     )
     db.add(new_risk)
     

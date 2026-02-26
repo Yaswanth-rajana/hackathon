@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const citizenApi = axios.create({
-    baseURL: 'http://localhost:8000/api',
+    baseURL: import.meta.env.VITE_API_URL || '/api',
     withCredentials: true,
 });
 
@@ -49,7 +49,7 @@ citizenApi.interceptors.response.use(
 
             try {
                 const response = await axios.post(
-                    'http://localhost:8000/api/auth/refresh',
+                    `${import.meta.env.VITE_API_URL || '/api'}/auth/refresh`,
                     {},
                     { withCredentials: true }
                 );
@@ -91,7 +91,25 @@ export const citizenActions = {
     getProfile: () => citizenApi.get('/citizen/profile').then(res => res.data),
     getEntitlement: () => citizenApi.get('/citizen/entitlement').then(res => res.data),
     getShop: () => citizenApi.get('/citizen/shop').then(res => res.data),
-    getTransactions: () => citizenApi.get('/citizen/transactions').then(res => res.data),
+    getTransactions: (limit = 10) => citizenApi.get(`/citizen/transactions?limit=${limit}`).then(res => res.data),
+    uploadComplaintAttachment: async (file) => {
+        const data_base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const result = String(reader.result || '');
+                const comma = result.indexOf(',');
+                resolve(comma >= 0 ? result.slice(comma + 1) : result);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+
+        return citizenApi.post('/citizen/complaints/upload', {
+            filename: file.name,
+            content_type: file.type,
+            data_base64
+        }).then(res => res.data);
+    },
     getComplaints: () => citizenApi.get('/citizen/complaints').then(res => res.data),
     fileComplaint: (data) => citizenApi.post('/citizen/complaint', data).then(res => res.data),
     getNotifications: () => citizenApi.get('/citizen/notifications').then(res => res.data),

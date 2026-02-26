@@ -1,14 +1,14 @@
 import api from './api';
 
 const adminSimulationApi = {
-    injectGhosts: (shopId, count, seed) =>
-        api.post(`/admin/simulate/ghost/${shopId}`, { count, seed }),
+    injectGhosts: (shopId, intensity, seed) =>
+        api.post(`/admin/simulate/ghost/${shopId}`, { intensity, seed }),
 
-    injectStockMismatch: (shopId, inflationFactor, monthYear) =>
-        api.post(`/admin/simulate/mismatch/${shopId}`, { inflation_factor: inflationFactor, month_year: monthYear }),
+    injectStockMismatch: (shopId, intensity, monthYear) =>
+        api.post(`/admin/simulate/mismatch/${shopId}`, { intensity, month_year: monthYear }),
 
-    injectComplaints: (shopId, count, seed) =>
-        api.post(`/admin/simulate/complaints/${shopId}`, { count, seed }),
+    injectComplaints: (shopId, intensity, seed) =>
+        api.post(`/admin/simulate/complaints/${shopId}`, { intensity, seed }),
 
     resetDemo: (shopId) =>
         api.post(`/admin/simulate/reset/${shopId}`),

@@ -1,6 +1,6 @@
 import sys
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -89,7 +89,8 @@ def setup_demo_shop():
             stock_wheat=5000,
             stock_rice=10000,
             stock_sugar=2000,
-            stock_kerosene=1000
+            stock_kerosene=1000,
+            district="Visakhapatnam"
         )
         db.add(shop)
 
@@ -108,7 +109,7 @@ def setup_demo_shop():
             )
             db.add(ben)
             
-            ent_month = datetime.utcnow().strftime("%Y-%m")
+            ent_month = datetime.now(timezone.utc).strftime("%Y-%m")
             ent = Entitlement(
                 ration_card=rc,
                 month_year=ent_month,

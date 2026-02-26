@@ -25,9 +25,11 @@ class Shop(Base):
     timings = Column(String, default="09:00 AM - 05:00 PM")
     rating = Column(Float, default=4.5)
     risk_score = Column(Float, default=0.0)
+    status = Column(String(30), default="active", index=True)
+    under_review_reason = Column(Text, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
         CheckConstraint("stock_wheat >= 0", name="check_stock_wheat_positive"),

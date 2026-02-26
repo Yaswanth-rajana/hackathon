@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -76,7 +76,7 @@ def start_inspection(
         raise HTTPException(status_code=400, detail="Only scheduled inspections can be started")
         
     inspection.status = "in_progress"
-    inspection.started_at = datetime.utcnow()
+    inspection.started_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(inspection)
     return inspection
@@ -95,7 +95,7 @@ def complete_inspection(
         raise HTTPException(status_code=400, detail="Only in_progress inspections can be completed")
         
     inspection.status = "completed"
-    inspection.completed_at = datetime.utcnow()
+    inspection.completed_at = datetime.now(timezone.utc)
     inspection.findings = payload.findings
     inspection.evidence_urls = payload.evidence_urls
     

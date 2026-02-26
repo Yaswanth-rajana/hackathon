@@ -1,6 +1,7 @@
 import enum
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, Enum, Text, ForeignKey, Index
+from sqlalchemy.sql import func
 from app.database import Base
 
 class AlertStatus(str, enum.Enum):
@@ -35,11 +36,11 @@ class Alert(Base):
     detected_by = Column(String, nullable=False) # ML, Manual, System
     
     # Lifecycle Tracking
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     acknowledged_by = Column(String, nullable=True) # User ID or name
-    resolved_at = Column(DateTime, nullable=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index('idx_alert_created_at', 'created_at'),

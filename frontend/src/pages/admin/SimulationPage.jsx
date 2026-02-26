@@ -16,9 +16,7 @@ const SimulationPage = () => {
     const { connected, registerOnConnect } = useAdminWebSocket();
 
     // Control States
-    const [ghostCount, setGhostCount] = useState(50);
-    const [inflationFactor, setInflationFactor] = useState(1.2);
-    const [complaintCount, setComplaintCount] = useState(10);
+    const [intensity, setIntensity] = useState('MEDIUM');
 
     // Simulation Logs
     const [logs, setLogs] = useState([
@@ -78,8 +76,8 @@ const SimulationPage = () => {
         try {
             setPendingRequest(true);
             setLoading(true);
-            await adminSimulationApi.injectGhosts(shopId, ghostCount, Math.floor(Math.random() * 1000));
-            addLog(`Injected ${ghostCount} ghost beneficiaries into ${shopId}`, 'success');
+            await adminSimulationApi.injectGhosts(shopId, intensity, Math.floor(Math.random() * 1000));
+            addLog(`Injected ${intensity} intensity ghost beneficiaries into ${shopId}`, 'success');
             if (dashboardRef.current) dashboardRef.current.refresh();
         } catch (err) {
             addLog(`Ghost injection failed: ${err.message}`, 'error');
@@ -96,8 +94,8 @@ const SimulationPage = () => {
             setPendingRequest(true);
             setLoading(true);
             const monthYear = new Date().toISOString().slice(0, 7); // YYYY-MM
-            await adminSimulationApi.injectStockMismatch(shopId, inflationFactor, monthYear);
-            addLog(`Injected ${inflationFactor}x stock mismatch for ${monthYear}`, 'success');
+            await adminSimulationApi.injectStockMismatch(shopId, intensity, monthYear);
+            addLog(`Injected ${intensity} intensity stock mismatch for ${monthYear}`, 'success');
             if (dashboardRef.current) dashboardRef.current.refresh();
         } catch (err) {
             addLog(`Stock mismatch injection failed: ${err.message}`, 'error');
@@ -113,8 +111,8 @@ const SimulationPage = () => {
         try {
             setPendingRequest(true);
             setLoading(true);
-            await adminSimulationApi.injectComplaints(shopId, complaintCount, Math.floor(Math.random() * 1000));
-            addLog(`Injected ${complaintCount} complaint spikes`, 'success');
+            await adminSimulationApi.injectComplaints(shopId, intensity, Math.floor(Math.random() * 1000));
+            addLog(`Injected ${intensity} intensity complaint spikes`, 'success');
             if (dashboardRef.current) dashboardRef.current.refresh();
         } catch (err) {
             addLog(`Complaint spike injection failed: ${err.message}`, 'error');
@@ -125,26 +123,20 @@ const SimulationPage = () => {
         }
     };
 
-    const runScenario = async (intensity) => {
+    const runScenario = async (targetIntensity) => {
         if (pendingRequest) return;
         try {
             setPendingRequest(true);
             setLoading(true);
-            addLog(`Running ${intensity.toUpperCase()} intensity scenario...`, 'scenario');
-
-            let ghosts = 20, complaints = 5, mismatch = 1.0;
-            if (intensity === 'medium') { ghosts = 100; complaints = 20; mismatch = 1.3; }
-            if (intensity === 'high') { ghosts = 250; complaints = 60; mismatch = 1.7; }
+            addLog(`Running ${targetIntensity.toUpperCase()} intensity scenario...`, 'scenario');
 
             const monthYear = new Date().toISOString().slice(0, 7);
 
-            await Promise.all([
-                adminSimulationApi.injectGhosts(shopId, ghosts, 42),
-                adminSimulationApi.injectComplaints(shopId, complaints, 42),
-                mismatch > 1.0 ? adminSimulationApi.injectStockMismatch(shopId, mismatch, monthYear) : Promise.resolve()
-            ]);
+            await adminSimulationApi.injectGhosts(shopId, targetIntensity, 42);
+            await adminSimulationApi.injectComplaints(shopId, targetIntensity, 42);
+            await adminSimulationApi.injectStockMismatch(shopId, targetIntensity, monthYear);
 
-            addLog(`Scenario ${intensity.toUpperCase()} deployed successfully.`, 'success');
+            addLog(`Scenario ${targetIntensity.toUpperCase()} deployed successfully.`, 'success');
             if (dashboardRef.current) dashboardRef.current.refresh();
         } catch (err) {
             addLog(`Scenario failed: ${err.message}`, 'error');
@@ -250,122 +242,109 @@ const SimulationPage = () => {
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                 {/* SECTION 1 & 2: Control Panel */}
                 <div className="xl:col-span-2 space-y-8">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {/* Ghost Injection Card */}
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 group hover:border-blue-400 transition-colors">
-                            <div className="flex items-center gap-3 mb-6 text-slate-500 transition-colors group-hover:text-blue-600">
-                                <Ghost size={24} />
-                                <h3 className="font-bold">Ghost Beneficiaries</h3>
+                    <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-3">
+                                <Terminal size={20} className="text-blue-600" />
+                                Global Intensity Control
+                            </h3>
+                            <div className="flex bg-slate-100 p-1 rounded-xl">
+                                {['LOW', 'MEDIUM', 'HIGH'].map(lvl => (
+                                    <button
+                                        key={lvl}
+                                        onClick={() => setIntensity(lvl)}
+                                        className={`px-6 py-2 rounded-lg text-xs font-black transition-all ${intensity === lvl ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        {lvl}
+                                    </button>
+                                ))}
                             </div>
-                            <div className="space-y-4">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-slate-500">Injection Count</span>
-                                    <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 rounded">{ghostCount}</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {/* Ghost Injection Card */}
+                            <div className="p-6 rounded-2xl border border-slate-100 bg-slate-50/50 group hover:border-blue-400 transition-colors">
+                                <div className="flex items-center gap-3 mb-4 text-slate-500 transition-colors group-hover:text-blue-600">
+                                    <Ghost size={24} />
+                                    <h3 className="font-bold text-sm">Ghost Beneficiaries</h3>
                                 </div>
-                                <input
-                                    type="range" min="10" max="300" step="10"
-                                    value={ghostCount}
-                                    onChange={(e) => setGhostCount(parseInt(e.target.value))}
-                                    className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                                />
+                                <p className="text-[10px] text-slate-400 font-medium mb-6">Inject synthetic identities into the beneficiary ledger.</p>
                                 <button
                                     onClick={handleInjectGhosts}
                                     disabled={loading || pendingRequest}
-                                    className={`w-full py-2 ${loading || pendingRequest ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-50 hover:bg-blue-600 hover:text-white text-slate-700'} font-semibold rounded-lg transition-all border border-slate-200 hover:border-blue-600`}
+                                    className={`w-full py-3 ${loading || pendingRequest ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white shadow-sm hover:bg-blue-600 hover:text-white text-slate-700'} font-black text-xs uppercase tracking-widest rounded-xl transition-all border border-slate-200 hover:border-blue-600`}
                                 >
-                                    Inject Ghosts
+                                    Inject
                                 </button>
                             </div>
-                        </div>
 
-                        {/* Stock Mismatch Card */}
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 group hover:border-purple-400 transition-colors">
-                            <div className="flex items-center gap-3 mb-6 text-slate-500 transition-colors group-hover:text-purple-600">
-                                <Package size={24} />
-                                <h3 className="font-bold">Stock Mismatch</h3>
-                            </div>
-                            <div className="space-y-4">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-slate-500">Inflation Factor</span>
-                                    <span className="font-mono font-bold text-purple-600 bg-purple-50 px-2 rounded">{inflationFactor}x</span>
+                            {/* Stock Mismatch Card */}
+                            <div className="p-6 rounded-2xl border border-slate-100 bg-slate-50/50 group hover:border-purple-400 transition-colors">
+                                <div className="flex items-center gap-3 mb-4 text-slate-500 transition-colors group-hover:text-purple-600">
+                                    <Package size={24} />
+                                    <h3 className="font-bold text-sm">Stock Mismatch</h3>
                                 </div>
-                                <input
-                                    type="range" min="1.1" max="2.0" step="0.1"
-                                    value={inflationFactor}
-                                    onChange={(e) => setInflationFactor(parseFloat(e.target.value))}
-                                    className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                                />
+                                <p className="text-[10px] text-slate-400 font-medium mb-6">Inflate stock records to simulate distribution variance.</p>
                                 <button
                                     onClick={handleInjectMismatch}
                                     disabled={loading || pendingRequest}
-                                    className={`w-full py-2 ${loading || pendingRequest ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-50 hover:bg-purple-600 hover:text-white text-slate-700'} font-semibold rounded-lg transition-all border border-slate-200 hover:border-purple-600`}
+                                    className={`w-full py-3 ${loading || pendingRequest ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white shadow-sm hover:bg-purple-600 hover:text-white text-slate-700'} font-black text-xs uppercase tracking-widest rounded-xl transition-all border border-slate-200 hover:border-purple-600`}
                                 >
-                                    Inflate Stock
+                                    Inflate
                                 </button>
                             </div>
-                        </div>
 
-                        {/* Complaint Spike Card */}
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 group hover:border-amber-400 transition-colors">
-                            <div className="flex items-center gap-3 mb-6 text-slate-500 transition-colors group-hover:text-amber-600">
-                                <MessageSquare size={24} />
-                                <h3 className="font-bold">Complaint Spike</h3>
-                            </div>
-                            <div className="space-y-4">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-slate-500">Complaint Count</span>
-                                    <span className="font-mono font-bold text-amber-600 bg-amber-50 px-2 rounded">{complaintCount}</span>
+                            {/* Complaint Spike Card */}
+                            <div className="p-6 rounded-2xl border border-slate-100 bg-slate-50/50 group hover:border-amber-400 transition-colors">
+                                <div className="flex items-center gap-3 mb-4 text-slate-500 transition-colors group-hover:text-amber-600">
+                                    <MessageSquare size={24} />
+                                    <h3 className="font-bold text-sm">Complaint Spike</h3>
                                 </div>
-                                <input
-                                    type="range" min="5" max="100" step="5"
-                                    value={complaintCount}
-                                    onChange={(e) => setComplaintCount(parseInt(e.target.value))}
-                                    className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-amber-600"
-                                />
+                                <p className="text-[10px] text-slate-400 font-medium mb-6">Force high-volume social grievances against the shop.</p>
                                 <button
                                     onClick={handleInjectComplaints}
                                     disabled={loading || pendingRequest}
-                                    className={`w-full py-2 ${loading || pendingRequest ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-50 hover:bg-amber-600 hover:text-white text-slate-700'} font-semibold rounded-lg transition-all border border-slate-200 hover:border-amber-600`}
+                                    className={`w-full py-3 ${loading || pendingRequest ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white shadow-sm hover:bg-amber-600 hover:text-white text-slate-700'} font-black text-xs uppercase tracking-widest rounded-xl transition-all border border-slate-200 hover:border-amber-600`}
                                 >
-                                    Force Complaints
+                                    Spike
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    {/* Random Scenario Engine */}
+                    {/* Scenario Engine */}
                     <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-3">
                                 <Play size={20} className="text-emerald-600" />
-                                Random Scenario Engine
+                                Automated Scenario Engine
                             </h3>
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Advanced Orchestration</span>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-2 py-0.5 rounded">Parallel Orchestration</span>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <button
-                                onClick={() => runScenario('low')}
+                                onClick={() => runScenario('LOW')}
                                 disabled={loading || pendingRequest}
                                 className={`p-4 rounded-xl border ${loading || pendingRequest ? 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed' : 'bg-slate-50 border-slate-100 hover:border-emerald-500 hover:bg-emerald-50'} transition-all flex flex-col gap-1 items-start group`}
                             >
-                                <span className="text-emerald-700 font-bold group-hover:scale-110 transition-transform">🟢 LOW IMPACT</span>
-                                <span className="text-xs text-slate-500 text-left">20 ghosts + 5 complaints</span>
+                                <span className="text-emerald-700 font-black text-xs group-hover:scale-105 transition-transform uppercase tracking-tighter">🟢 PROBING MODE</span>
+                                <span className="text-[10px] text-slate-500 text-left font-medium">Subtle anomalies; hard to detect.</span>
                             </button>
                             <button
-                                onClick={() => runScenario('medium')}
+                                onClick={() => runScenario('MEDIUM')}
                                 disabled={loading || pendingRequest}
                                 className={`p-4 rounded-xl border ${loading || pendingRequest ? 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed' : 'bg-slate-50 border-slate-100 hover:border-amber-500 hover:bg-amber-50'} transition-all flex flex-col gap-1 items-start group`}
                             >
-                                <span className="text-amber-700 font-bold group-hover:scale-110 transition-transform">🟡 MEDIUM IMPACT</span>
-                                <span className="text-xs text-slate-500 text-left">100 ghosts + 20 complaints + 1.3x mismatch</span>
+                                <span className="text-amber-700 font-black text-xs group-hover:scale-105 transition-transform uppercase tracking-tighter">🟡 EXPLOIT MODE</span>
+                                <span className="text-[10px] text-slate-500 text-left font-medium">Moderate leakage; system should alert.</span>
                             </button>
                             <button
-                                onClick={() => runScenario('high')}
+                                onClick={() => runScenario('HIGH')}
                                 disabled={loading || pendingRequest}
                                 className={`p-4 rounded-xl border ${loading || pendingRequest ? 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed' : 'bg-slate-50 border-slate-100 hover:border-red-500 hover:bg-red-50'} transition-all flex flex-col gap-1 items-start group`}
                             >
-                                <span className="text-red-700 font-bold group-hover:scale-110 transition-transform">🔴 HIGH IMPACT (WOW)</span>
-                                <span className="text-xs text-slate-500 text-left">250 ghosts + 60 complaints + 1.7x mismatch</span>
+                                <span className="text-red-700 font-black text-xs group-hover:scale-105 transition-transform uppercase tracking-tighter">🔴 REVENGE MODE</span>
+                                <span className="text-[10px] text-slate-500 text-left font-medium">Extreme systemic failure simulation.</span>
                             </button>
                         </div>
                     </div>
