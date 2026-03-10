@@ -9,9 +9,11 @@ from app.core.dependencies import get_current_user
 from app.core.rate_limiter import limiter
 from app.models.user import User
 import asyncio
+import logging
 from app.core.thread_pool import SHARED_EXECUTOR
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # Memory Throttling: Max 3 concurrent report generations
 REPORT_SEMAPHORE = asyncio.Semaphore(3)
@@ -49,8 +51,9 @@ async def download_monthly_report(
             media_type="application/pdf", 
             headers=headers
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Monthly report generation failed", extra={"district": district, "month": month})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/shop/{shop_id}")
 @limiter.limit("5/minute")
@@ -81,8 +84,9 @@ async def download_shop_report(
             media_type="application/pdf", 
             headers=headers
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Shop report generation failed", extra={"shop_id": shop_id, "month": month})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/analytics")
 @limiter.limit("5/minute")
@@ -116,5 +120,6 @@ async def download_analytics_excel(
              media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
              headers=headers
          )
-     except Exception as e:
-         raise HTTPException(status_code=500, detail=str(e))
+     except Exception:
+         logger.exception("Analytics export generation failed", extra={"district": district})
+         raise HTTPException(status_code=500, detail="Internal server error")

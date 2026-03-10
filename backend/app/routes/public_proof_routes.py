@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
+import html
 
 from app.database import get_db
 from app.models.suspension_record import SuspensionRecord
@@ -14,9 +15,10 @@ def get_public_proof(public_id: str, db: Session = Depends(get_db)):
     if not rec:
         raise HTTPException(status_code=404, detail="Proof record not found")
 
+    esc = lambda value: html.escape(str(value), quote=True) if value is not None else "N/A"
     factors = rec.ai_factors or {}
     factors_lines = "".join(
-        f"<li><strong>{k}</strong>: {v}</li>"
+        f"<li><strong>{esc(k)}</strong>: {esc(v)}</li>"
         for k, v in factors.items()
     )
 
@@ -44,16 +46,16 @@ def get_public_proof(public_id: str, db: Session = Depends(get_db)):
           <p class="muted">This proof is publicly accessible and cryptographically anchored to blockchain transaction data.</p>
 
           <div class="grid">
-            <div><div class="k">Proof ID</div><div class="v">{rec.public_id}</div></div>
-            <div><div class="k">Timestamp</div><div class="v">{rec.created_at}</div></div>
-            <div><div class="k">Shop</div><div class="v">{rec.shop_name or rec.shop_id}</div></div>
-            <div><div class="k">Dealer ID</div><div class="v">{rec.dealer_id or "N/A"}</div></div>
-            <div><div class="k">Risk Score (Before -> After)</div><div class="v">{rec.risk_score_before} -> {rec.risk_score_after}</div></div>
-            <div><div class="k">Reason for Suspension</div><div class="v">{rec.reason}</div></div>
-            <div><div class="k">Enforcement Block Index</div><div class="v">{rec.enforcement_block_index}</div></div>
-            <div><div class="k">Enforcement Txn ID</div><div class="v hash">{rec.enforcement_txn_id}</div></div>
-            <div><div class="k">Block Hash</div><div class="v hash">{rec.block_hash}</div></div>
-            <div><div class="k">Previous Hash</div><div class="v hash">{rec.previous_hash}</div></div>
+            <div><div class="k">Proof ID</div><div class="v">{esc(rec.public_id)}</div></div>
+            <div><div class="k">Timestamp</div><div class="v">{esc(rec.created_at)}</div></div>
+            <div><div class="k">Shop</div><div class="v">{esc(rec.shop_name or rec.shop_id)}</div></div>
+            <div><div class="k">Dealer ID</div><div class="v">{esc(rec.dealer_id)}</div></div>
+            <div><div class="k">Risk Score (Before -> After)</div><div class="v">{esc(rec.risk_score_before)} -> {esc(rec.risk_score_after)}</div></div>
+            <div><div class="k">Reason for Suspension</div><div class="v">{esc(rec.reason)}</div></div>
+            <div><div class="k">Enforcement Block Index</div><div class="v">{esc(rec.enforcement_block_index)}</div></div>
+            <div><div class="k">Enforcement Txn ID</div><div class="v hash">{esc(rec.enforcement_txn_id)}</div></div>
+            <div><div class="k">Block Hash</div><div class="v hash">{esc(rec.block_hash)}</div></div>
+            <div><div class="k">Previous Hash</div><div class="v hash">{esc(rec.previous_hash)}</div></div>
           </div>
 
           <h3>AI Factors</h3>

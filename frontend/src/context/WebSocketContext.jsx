@@ -27,13 +27,15 @@ export const WebSocketProvider = ({ children }) => {
         }
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const token = localStorage.getItem('dealer_access_token') || localStorage.getItem('token');
+        if (!token) return;
 
         // Extract host from VITE_API_BASE_URL or fallback to current window host
         let host = import.meta.env.VITE_API_BASE_URL
             ? import.meta.env.VITE_API_BASE_URL.replace(/^https?:\/\//, '').split('/')[0]
             : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'localhost:8000' : window.location.hostname + ':8000');
 
-        const wsUrl = `${protocol}//${host}/ws/admin/${user.district}`;
+        const wsUrl = `${protocol}//${host}/ws/admin/${encodeURIComponent(user.district)}?token=${encodeURIComponent(token)}`;
 
         console.log(`[WS] 🔌 Attempting connection: ${wsUrl}`);
         ws.current = new WebSocket(wsUrl);

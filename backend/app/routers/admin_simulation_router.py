@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+import logging
 from app.database import get_db
 from app.core.dependencies import require_admin
 from app.services.simulation_service import SimulationService
@@ -11,6 +12,7 @@ from app.schemas.simulation import (
 from app.utils.demo_guard import enforce_demo_mode
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.post("/ghost/{shop_id}")
 def inject_ghosts(
@@ -29,8 +31,9 @@ def inject_ghosts(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        logger.exception("Ghost injection failed", extra={"shop_id": shop_id})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/mismatch/{shop_id}")
 def inject_mismatch(
@@ -49,8 +52,9 @@ def inject_mismatch(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        logger.exception("Mismatch injection failed", extra={"shop_id": shop_id})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/complaints/{shop_id}")
 def inject_complaints(
@@ -69,8 +73,9 @@ def inject_complaints(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        logger.exception("Complaint spike injection failed", extra={"shop_id": shop_id})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/reset/{shop_id}")
 def reset_simulation(
@@ -84,8 +89,9 @@ def reset_simulation(
             db=db,
             shop_id=shop_id
         )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        logger.exception("Simulation reset failed", extra={"shop_id": shop_id})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/events/{shop_id}")
 def get_simulation_events(
@@ -107,8 +113,9 @@ def get_simulation_events(
                 "timestamp": e.executed_at.isoformat()
             } for e in events
         ]
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        logger.exception("Fetching simulation events failed", extra={"shop_id": shop_id})
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 def _format_event_msg(e):
     details = e.event_details or {}

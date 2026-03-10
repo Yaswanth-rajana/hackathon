@@ -124,9 +124,8 @@ def allocate_stock(
 def test_allocate_stock(
     shop_id: str,
     payload: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_role(UserRole.admin))
 ):
-    """Temporary unsecured route for automated test script."""
-    # Mock Admin User
-    admin_mock = User(id="admin_test", district="HYDERABAD")
-    return dealer_admin_service.allocate_stock(db, shop_id, admin_mock, payload)
+    """Secured test allocation route for automated checks."""
+    return dealer_admin_service.allocate_stock(db, shop_id, admin_user, payload)

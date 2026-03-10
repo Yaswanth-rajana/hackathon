@@ -1,6 +1,7 @@
 import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.services.event_emitter import manager
+from app.core.security import decode_token
 
 # Initialize logger early
 logger = logging.getLogger(__name__)
@@ -10,6 +11,18 @@ router = APIRouter()
 @router.websocket("/ws/admin/{district}")
 async def admin_websocket(websocket: WebSocket, district: str):
     logger.info(f"Incoming WebSocket connection attempt for district: {district}")
+    token = websocket.query_params.get("token")
+    payload = decode_token(token) if token else None
+
+    if not payload or payload.get("type") != "access" or payload.get("role") != "admin":
+        await websocket.close(code=1008)
+        return
+
+    token_district = payload.get("district")
+    if token_district and token_district not in ("HQ", district):
+        await websocket.close(code=1008)
+        return
+
     await manager.connect(websocket, district)
     try:
         while True:

@@ -34,6 +34,8 @@ class ComplaintUploadRequest(BaseModel):
     content_type: str
     data_base64: str
 
+ALLOWED_UPLOAD_EXTENSIONS = {".jpg", ".png", ".pdf"}
+
 @router.get("/profile", response_model=CitizenProfileResponse)
 def get_profile(
     current_citizen: Beneficiary = Depends(get_current_citizen),
@@ -124,12 +126,12 @@ async def upload_complaint_attachment(
     payload: ComplaintUploadRequest,
     current_citizen: Beneficiary = Depends(get_current_citizen),
 ):
-    allowed_prefixes = ("image/", "video/")
-    if not payload.content_type or not payload.content_type.startswith(allowed_prefixes):
-        raise HTTPException(status_code=400, detail="Only image/video files are allowed")
+    extension = Path(payload.filename or "").suffix.lower()
+    if extension not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Only .jpg, .png, .pdf files are allowed")
 
     try:
-        content = base64.b64decode(payload.data_base64)
+        content = base64.b64decode(payload.data_base64, validate=True)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid file payload")
 
@@ -139,7 +141,6 @@ async def upload_complaint_attachment(
     uploads_dir = Path(__file__).resolve().parents[2] / "uploads"
     uploads_dir.mkdir(parents=True, exist_ok=True)
 
-    extension = Path(payload.filename or "").suffix.lower()
     stored_name = f"{uuid.uuid4().hex}{extension}"
     destination = uploads_dir / stored_name
     destination.write_bytes(content)

@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+import logging
 from app.database import get_db
 from app.core.dependencies import require_admin
 from app.services.audit_service import AuditService
 from app.utils.demo_guard import enforce_demo_mode
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.post("/run/{shop_id}")
 def run_audit(
@@ -20,5 +22,6 @@ def run_audit(
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Manual audit run failed", extra={"shop_id": shop_id})
+        raise HTTPException(status_code=500, detail="Internal server error")

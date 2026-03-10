@@ -244,7 +244,7 @@ def distribute_ration(db: Session, dealer: User, request_data: dict, idempotency
         db.rollback()
         blockchain.discard_pending()
         logger.error(f"FATAL: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def _log_audit(db: Session, admin_id: str, target_id: str, action: str, metadata: dict, ip: str):

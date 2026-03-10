@@ -1,8 +1,10 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Dict, Any, List
 
 from app.database import get_db
+from app.core.dependencies import require_admin
 from app.services.ml.risk_engine import evaluate_shop
 from app.services.ml.explainability_service import explain_risk
 from app.services.forecast_service import ForecastService
@@ -11,7 +13,9 @@ from app.models.risk_score import RiskScore
 from app.models.shop import Shop
 from datetime import datetime, timezone
 
-router = APIRouter()
+logger = logging.getLogger(__name__)
+
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 # In-memory snapshot for "Before vs After" comparison
 # Format: { "shop_id": last_risk_score }
@@ -30,9 +34,9 @@ async def recalculate_risk(shop_id: str = "DEMO_001", db: Session = Depends(get_
     try:
         from app.services.audit_service import AuditService
         result = AuditService.run_shop_audit(db, shop_id)
-    except Exception as e:
-        import traceback
-        raise HTTPException(status_code=500, detail=f"Audit failed: {str(e)}\n{traceback.format_exc()}")
+    except Exception:
+        logger.exception("Audit recalculation failed", extra={"shop_id": shop_id})
+        raise HTTPException(status_code=500, detail="Internal server error")
     
     return {
         "shop_id": shop_id,

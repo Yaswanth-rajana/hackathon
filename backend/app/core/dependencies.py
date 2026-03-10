@@ -21,6 +21,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     payload = decode_token(token)
     if payload is None:
         raise credentials_exception
+    if payload.get("type") != "access":
+        raise credentials_exception
     
     user_id: str = payload.get("sub")
     role: str = payload.get("role")
@@ -48,6 +50,8 @@ def get_current_citizen(token: str = Depends(oauth2_scheme), db: Session = Depen
     
     payload = decode_token(token)
     if payload is None:
+        raise credentials_exception
+    if payload.get("type") != "access":
         raise credentials_exception
     
     user_id: str = payload.get("sub")

@@ -3,12 +3,14 @@ from typing import Dict, Any, List
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.core.dependencies import require_admin
 from app.services.blockchain.blockchain import blockchain
 from app.models.blockchain_ledger import BlockchainLedger
 
 router = APIRouter(
     prefix="/api/blockchain",
     tags=["Blockchain"],
+    dependencies=[Depends(require_admin)],
 )
 
 class TransactionRequest(BaseModel):
